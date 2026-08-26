@@ -15,6 +15,9 @@ class ProjectResponse(BaseModel):
     id: int
     name: str
 
+class ProjectUpdate(BaseModel):
+    name: str
+
 app = FastAPI()
 
 
@@ -73,3 +76,60 @@ def get_project(
         )
     
     return project
+
+@app.patch(
+    "/projects/{project_id}",
+    response_model=ProjectResponse,
+    responses={
+        404: {"description":"Project not found"}
+    },
+)
+def update_project(
+    project_id: int,
+    project_data: ProjectUpdate,
+    db: Session = Depends(get_db),
+):
+    statement = select(Project).where(
+        Project.id == project_id
+    )
+
+    project = db.scalar(statement)
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found",
+        )
+
+    project.name = project_data.name
+
+    db.commit()
+    db.refresh(project)
+
+
+    return project
+
+@app.delete(
+    "/projects/{project_id}",
+    responses= {
+        404:{"description":"Project not found"}
+    },
+)
+def delete_project(
+    project_id: int, 
+    db: Session = Depends(get_db)
+):
+    statement = select(Project).where(
+        Project.id == project_id
+    )
+
+    project = db.scalar(statement)
+    if project is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Project not found",
+            )
+    db.delete(project)
+    db.commit()
+
+    return {"menssage": "Project deleted"}

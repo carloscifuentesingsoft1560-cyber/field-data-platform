@@ -32,7 +32,8 @@ def create_project(project: ProjectCreate,
     db: Session = Depends(get_db),):
 
     db_project = Project(
-        name = project.name
+        name = project.name,
+        description = project.description,
     )
 
     db.add(db_project)

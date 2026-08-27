@@ -3,6 +3,7 @@ from pydantic import BaseModel, field_validator
 
 class ProjectCreate(BaseModel):
     name: str
+    description: str | None = None 
 
     @field_validator("name")
     @classmethod
@@ -18,9 +19,11 @@ class ProjectCreate(BaseModel):
 class ProjectResponse(BaseModel):
     id: int
     name: str
+    description: str | None = None 
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
+    description: str | None = None 
 
     @field_validator("name")
     @classmethod

@@ -42,4 +42,4 @@ Proyecto en desarrollo.
 
 ## Autor
 
-README generado inicialmente con GitHub Portfolio Assistant.
+README Carlos Eduardo Cifuentes Sanabria

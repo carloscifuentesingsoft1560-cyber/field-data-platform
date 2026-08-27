@@ -11,3 +11,6 @@ class Project(Base):
     description:Mapped[str | None] = mapped_column(
         nullable=True
     )
+    status:Mapped[str] = mapped_column(
+            default="active"
+    )

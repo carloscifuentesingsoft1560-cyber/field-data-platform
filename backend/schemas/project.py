@@ -1,9 +1,12 @@
+from typing import Literal
+
 from pydantic import BaseModel, field_validator
 
 
 class ProjectCreate(BaseModel):
     name: str
     description: str | None = None 
+    status:Literal ["active", "inactive"] = "active"
 
     @field_validator("name")
     @classmethod
@@ -14,16 +17,16 @@ class ProjectCreate(BaseModel):
             )
         return value
 
-
-
 class ProjectResponse(BaseModel):
     id: int
     name: str
-    description: str | None = None 
+    description: str | None = None
+    status:Literal ["active", "inactive"] 
 
 class ProjectUpdate(BaseModel):
     name: str | None = None
-    description: str | None = None 
+    description: str | None = None
+    status: Literal ["active", "inactive"] | None = None 
 
     @field_validator("name")
     @classmethod

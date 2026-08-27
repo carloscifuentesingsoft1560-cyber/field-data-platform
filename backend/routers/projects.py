@@ -85,8 +85,11 @@ def update_project(
             status_code=404,
             detail="Project not found",
         )
-
-    project.name = project_data.name
+    update_data = project_data.model_dump(
+         exclude_unset= True
+    )
+    for field, value in update_data.items():
+         setattr(project, field, value)
 
     db.commit()
     db.refresh(project)

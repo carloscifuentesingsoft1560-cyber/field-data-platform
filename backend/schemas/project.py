@@ -1,12 +1,35 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class ProjectCreate(BaseModel):
     name: str
+
+    @field_validator("name")
+    @classmethod
+    def validate_name (cls, value):
+        if not value.strip():
+            raise ValueError(
+               "El nombre no puede estar vacio"
+            )
+        return value
+
+
 
 class ProjectResponse(BaseModel):
     id: int
     name: str
 
 class ProjectUpdate(BaseModel):
-    name: str
+    name: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name (cls, value):
+        if value is None:
+            raise ValueError("El nombre no puede ser nulo")
+      
+        if not value.strip():
+            raise ValueError(
+                "El nombre no puede estar vacio"
+            )
+        return value

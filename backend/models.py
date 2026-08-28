@@ -1,5 +1,6 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from datetime import datetime
+from datetime import date
 from sqlalchemy import func
 
 class Base(DeclarativeBase):
@@ -23,4 +24,9 @@ class Project(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
-    
+    start_date : Mapped[date] = mapped_column(
+        nullable=False
+    )
+    end_date: Mapped[date | None] = mapped_column(
+         nullable=True   
+    )

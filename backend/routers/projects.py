@@ -34,6 +34,9 @@ def create_project(project: ProjectCreate,
     db_project = Project(
         name = project.name,
         description = project.description,
+        status = project.status,
+        start_date = project.start_date,
+        end_date = project.end_date,
     )
 
     db.add(db_project)
@@ -89,6 +92,15 @@ def update_project(
     update_data = project_data.model_dump(
          exclude_unset= True
     )
+    new_start_date = update_data.get("start_date", project.start_date)
+    new_end_date = update_data.get("end_date", project.end_date)
+
+    if new_end_date is not None and new_end_date < new_start_date:
+         raise HTTPException(
+              status_code=422,
+              detail="La fecha de finalizacion no puede ser anterior a la fecha de inicio"
+         )
+
     for field, value in update_data.items():
          setattr(project, field, value)
 

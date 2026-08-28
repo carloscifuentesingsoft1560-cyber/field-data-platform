@@ -1,4 +1,5 @@
 from typing import Literal
+from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
@@ -22,6 +23,9 @@ class ProjectResponse(BaseModel):
     name: str
     description: str | None = None
     status:Literal ["active", "inactive"] 
+    created_at:datetime
+    updated_at: datetime
+    
 
 class ProjectUpdate(BaseModel):
     name: str | None = None

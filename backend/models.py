@@ -1,7 +1,9 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from datetime import datetime
 from datetime import date
-from sqlalchemy import func
+from sqlalchemy import ForeignKey, func
+
+
 
 class Base(DeclarativeBase):
     pass
@@ -29,4 +31,48 @@ class Project(Base):
     )
     end_date: Mapped[date | None] = mapped_column(
          nullable=True   
+    )
+
+class Role(Base):
+    __tablename__ ="roles"
+
+    id:Mapped[int]= mapped_column(
+        primary_key=True
+    )
+    name:Mapped[str]= mapped_column(
+        unique=True,
+        nullable=False
+    )
+
+class User(Base):
+    __tablename__ ='users'
+    id:Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    employee_number: Mapped[str] = mapped_column(
+        unique=True,
+        nullable=False
+    )
+
+    identification: Mapped[str] = mapped_column(
+        unique=True,
+        nullable=False
+    )
+
+    password_hash: Mapped[str] = mapped_column(
+        nullable=False
+    )
+
+    role_id: Mapped[int] = mapped_column(
+        ForeignKey ("roles.id"),
+        nullable=False
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        default=True,
+        nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now()
     )

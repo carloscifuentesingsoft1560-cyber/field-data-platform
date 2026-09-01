@@ -1,7 +1,7 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from datetime import datetime
 from datetime import date
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, func, UniqueConstraint
 
 
 
@@ -75,4 +75,29 @@ class User(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
+    )
+
+class UserProject(Base):
+    __tablename__="user_projects"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "project_id",
+            name="uq_user_project"
+        ),
+    )
+
+    id:Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    project_id:Mapped[int] = mapped_column(
+        ForeignKey("projects.id"),
+        nullable=False
     )

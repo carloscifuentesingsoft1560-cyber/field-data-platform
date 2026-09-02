@@ -10,7 +10,7 @@ from backend.schemas.user_project import (
 )
 
 router = APIRouter(
-    prefix=("/user-projects"),
+    prefix="/user-projects",
     tags=["user-projects"]
 )
 
@@ -20,7 +20,7 @@ router = APIRouter(
     status_code=201,
     responses={
         404:{"description": "Usuario o proyecto no encontrado"},
-        409:{"description": "El ususarion ya está asignado al proyecto"}
+        409:{"description": "El ususario ya está asignado al proyecto"}
     }
 )
 def create_user_project(
@@ -71,3 +71,91 @@ def create_user_project(
     db.refresh(db_assignment)
 
     return db_assignment
+
+@router.get(
+    "/user/{user_id}",
+    response_model=list[UserProjectResponse],
+    responses= {
+        404:{"description":"Usuario no encontrado"}
+    }
+)
+def get_project_by_user(
+    user_id:int,
+    db: Session = Depends(get_db)
+):
+    user = db.scalar(
+        select(User).where(
+            User.id == user_id
+        )
+    )
+    if not user:
+        raise HTTPException(
+            status_code= 404,
+            detail="Usuario no encontrado"
+        )
+    assignments = db.scalars(
+        select(UserProject).where(
+        UserProject.user_id == user_id
+        )
+    ).all()
+
+    return assignments
+@router.get(
+    "/project/{project_id}",
+    response_model=list[UserProjectResponse],
+    responses={
+         404:{"description":"Proyecto no encontrado"}
+        }
+)
+
+def get_users_by_project(
+    project_id:int,
+    db: Session = Depends(get_db)
+):
+    project = db.scalar(
+        select(Project).where(
+            Project.id == project_id
+        )
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail= "Proyecto no encontrado"
+        )
+
+
+    assignments = db.scalars(
+        select(UserProject).where(
+            UserProject.project_id == project_id
+        )
+    ).all()
+
+    return assignments
+
+@router.delete(
+    "/{user_id}/{project_id}",
+    status_code=204,
+    responses={
+        404:{"description":"Asignación no encontrada"}
+    }
+)
+def delete_user_project(
+    user_id: int,
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    assignment = db.scalar(
+        select(UserProject).where(
+        UserProject.user_id == user_id,
+        UserProject.project_id == project_id
+       )
+    )
+
+    if not assignment:
+        raise HTTPException(
+            status_code= 404,
+            detail="Asignación no encontrada"
+        )
+    db.delete(assignment)
+    db.commit()

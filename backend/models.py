@@ -101,3 +101,31 @@ class UserProject(Base):
         ForeignKey("projects.id"),
         nullable=False
     )
+
+class Form(Base):
+    __tablename__ ="forms"
+
+    id: Mapped[int] = mapped_column(
+        primary_key= True
+    )
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id"),
+        nullable=False
+    )
+
+    name: Mapped[str] = mapped_column(
+        nullable=False
+    )
+    description: Mapped[str | None] = mapped_column(
+        nullable=True
+
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        default=True,
+        nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now()
+    )

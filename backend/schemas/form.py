@@ -15,3 +15,8 @@ class FormResponse(BaseModel):
     description: str | None
     is_active: bool
     created_at : datetime
+
+class FormUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None 

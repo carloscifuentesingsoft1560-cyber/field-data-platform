@@ -140,7 +140,7 @@ class FormVersion(Base):
             name="uq_form_version"
         ),
     )
-
+    
     id:Mapped[int] = mapped_column(
         primary_key=True
     )
@@ -160,4 +160,41 @@ class FormVersion(Base):
 
     created_at: Mapped[datetime]= mapped_column(
         server_default=func.now()
+    )
+
+class FormField(Base):
+    __tablename__ = "form_fields"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "form_version_id",
+            "field_order",
+            name="uq_form_field_order"
+        ),
+    )
+
+    id:Mapped[int] = mapped_column(
+        primary_key = True
+    )
+
+    form_version_id: Mapped[int] = mapped_column(
+        ForeignKey("form_versions.id"),
+        nullable = False
+    )
+
+    name: Mapped[str] = mapped_column(
+        nullable = False
+    )
+
+    field_type: Mapped[str] = mapped_column(
+        nullable = False
+    )
+
+    field_order: Mapped[int] = mapped_column(
+        nullable = False 
+    )
+
+    is_required: Mapped[bool] = mapped_column(
+        default = False,
+        nullable = False
     )

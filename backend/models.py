@@ -129,3 +129,35 @@ class Form(Base):
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
     )
+
+class FormVersion(Base):
+    __tablename__="form_versions"
+
+    __table_args__ =(
+        UniqueConstraint(
+            "form_id",
+            "version_number",
+            name="uq_form_version"
+        ),
+    )
+
+    id:Mapped[int] = mapped_column(
+        primary_key=True
+    )
+    form_id: Mapped[int] = mapped_column(
+        ForeignKey("forms.id"),
+        nullable=False
+    )
+
+    version_number: Mapped[int] = mapped_column(
+        nullable=False
+    )
+
+    status: Mapped[str] = mapped_column(
+        default="draft",
+        nullable=False
+    )
+
+    created_at: Mapped[datetime]= mapped_column(
+        server_default=func.now()
+    )

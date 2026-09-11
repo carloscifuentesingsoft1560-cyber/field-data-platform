@@ -198,3 +198,40 @@ class FormField(Base):
         default = False,
         nullable = False
     )
+class FieldOption(Base):
+    __tablename__ = "field_options"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "form_field_id",
+            "option_order",
+            name= "uq_field_option_order"
+        ),
+        UniqueConstraint(
+            "form_field_id",
+            "value",
+            name="uq_field_option_value"
+        ),
+
+    )
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    form_field_id: Mapped[int] = mapped_column(
+        ForeignKey("form_fields.id"),
+        nullable= False
+    )
+
+    label: Mapped[str] = mapped_column(
+        nullable= False
+    )
+
+    value: Mapped[str] = mapped_column(
+        nullable= False
+    )
+
+    option_order: Mapped[int] = mapped_column(
+        nullable= False
+    )

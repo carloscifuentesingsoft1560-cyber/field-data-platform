@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from datetime import datetime
@@ -10,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     Float,
+    Numeric,
     )
 
 
@@ -288,6 +291,58 @@ class Survey(Base):
     )
 
     received_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        nullable=False
+    )
+
+class SurveyAnswer(Base):
+    __tablename__ = "survey_answers"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "survey_id",
+            "form_field_id",
+            name="uq_survey_answer_field"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    survey_id: Mapped[int] = mapped_column(
+        ForeignKey("surveys.id"),
+        nullable=False
+    )
+
+    form_field_id: Mapped[int] = mapped_column(
+        ForeignKey("form_fields.id"),
+        nullable=False
+    )
+
+    value_text: Mapped[str | None] = mapped_column(
+        nullable=True
+    )
+
+    value_number: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4),
+        nullable=True
+    )
+
+    value_date: Mapped[date | None] = mapped_column(
+        nullable=True
+    )
+
+    value_boolean: Mapped[bool | None] = mapped_column(
+        nullable=True
+    )
+
+    field_option_id: Mapped[int | None] = mapped_column(
+        ForeignKey("field_options.id"),
+        nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         nullable=False
     )

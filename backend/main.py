@@ -5,7 +5,12 @@ from backend.routers.users import router as users_router
 from backend.routers.user_projects import router as user_projects_router
 from backend.routers.forms import router as forms_router
 from backend.routers.form_versions import router as form_versions_router
-from backend.routers import form_fields, field_options, surveys
+from backend.routers import (
+    form_fields, 
+    field_options, 
+    surveys,
+    survey_answers,
+)
 
 app = FastAPI()
 
@@ -17,6 +22,7 @@ app.include_router(form_versions_router)
 app.include_router(form_fields.router)
 app.include_router(field_options.router)
 app.include_router(surveys.router)
+app.include_router(survey_answers.router)
 
 
 @app.get("/")

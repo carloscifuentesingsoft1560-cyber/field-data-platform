@@ -1,7 +1,16 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
 from datetime import datetime
 from datetime import date
-from sqlalchemy import ForeignKey, func, UniqueConstraint
+from uuid import UUID
+
+from sqlalchemy import (
+    ForeignKey, 
+    func, 
+    UniqueConstraint,
+    Uuid,
+    Float,
+    )
 
 
 
@@ -234,4 +243,51 @@ class FieldOption(Base):
 
     option_order: Mapped[int] = mapped_column(
         nullable= False
+    )
+
+class Survey(Base):
+    __tablename__ = "surveys"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    uuid: Mapped[UUID] = mapped_column(
+        Uuid,
+        unique=True,
+        nullable=False
+    )
+
+    form_version_id: Mapped[int] = mapped_column(
+        ForeignKey("form_versions.id"),
+        nullable=False
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    status: Mapped[str] = mapped_column(
+        default="submitted",
+        nullable=False
+    )
+
+    latitude: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True
+    )
+
+    longitude: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True
+    )
+
+    captured_at: Mapped[datetime] = mapped_column(
+        nullable=False
+    )
+
+    received_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        nullable=False
     )

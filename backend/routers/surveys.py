@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -15,15 +16,13 @@ from backend.models import (
     User,
     UserProject,
 )
-from backend.schemas.survey import (
-    SurveyCreate,
-    SurveyResponse,
-)
+from backend.schemas.survey import SurveyResponse
+
 
 from backend.schemas.survey_sync import (
-    SurveySyncCreate,
     SurveySyncResponse,
-)
+    SurveySyncCreate
+    )
 
 
 router = APIRouter(
@@ -31,136 +30,6 @@ router = APIRouter(
     tags=["surveys"],
 )
 
-
-@router.post(
-    "/",
-    response_model=SurveyResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        200: {
-            "model": SurveyResponse,
-            "description": "La encuesta ya había sido procesada y se devuelve la existente",
-        },
-        400: {
-            "description": "Versión no publicada, formulario inactivo o usuario inactivo",
-        },
-        403: {
-            "description": "El usuario no está asignado al proyecto",
-        },
-        404: {
-            "description": "Versión, formulario o usuario no encontrado",
-        },
-    },
-    
-)
-def create_survey(
-    survey_data: SurveyCreate,
-    response: Response,
-    db: Session = Depends(get_db),
-):
-    # 1. Verificar si este UUID ya fue procesado
-    existing_survey = db.scalar(
-        select(Survey).where(
-            Survey.uuid == survey_data.uuid
-        )
-    )
-
-    if existing_survey is not None:
-        response.status_code = status.HTTP_200_OK
-        return existing_survey
-
-    # 2. Verificar que la versión del formulario exista
-    version = db.scalar(
-        select(FormVersion).where(
-            FormVersion.id == survey_data.form_version_id
-        )
-    )
-
-    if version is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Versión de formulario no encontrada",
-        )
-
-    # 3. Solo se pueden diligenciar versiones publicadas
-    if version.status != "published":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Solo se pueden diligenciar versiones publicadas",
-        )
-
-    # 4. Buscar el formulario
-    form = db.scalar(
-        select(Form).where(
-            Form.id == version.form_id
-        )
-    )
-
-    if form is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Formulario no encontrado",
-        )
-
-    # Verificar que el formulario esté activo
-    if not form.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El formulario no está activo",
-        )
-
-    # 5. Verificar que el usuario exista
-    user = db.scalar(
-        select(User).where(
-            User.id == survey_data.user_id
-        )
-    )
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado",
-        )
-
-    # Verificar que el usuario esté activo
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El usuario no está activo",
-        )
-
-    # 6. Verificar asignación usuario-proyecto
-    user_project = db.scalar(
-        select(UserProject).where(
-            UserProject.user_id == survey_data.user_id,
-            UserProject.project_id == form.project_id,
-        )
-    )
-
-    if user_project is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="El usuario no está asignado a este proyecto",
-        )
-
-    # 7. Crear la encuesta
-    new_survey = Survey(
-        uuid=survey_data.uuid,
-        form_version_id=survey_data.form_version_id,
-        user_id=survey_data.user_id,
-        status="submitted",
-        latitude=survey_data.latitude,
-        longitude=survey_data.longitude,
-        captured_at=survey_data.captured_at,
-    )
-
-    db.add(new_survey)
-    db.commit()
-    db.refresh(new_survey)
-
-    # MUY IMPORTANTE:
-    # La función debe devolver el objeto creado.
-    return new_survey
 
 @router.get(
     "/",
@@ -555,31 +424,71 @@ def sync_survey(
 
     db.add(new_survey)
 
-    # flush envía el INSERT a PostgreSQL y permite obtener
-    # new_survey.id, pero SIN cerrar la transacción.
-    db.flush()
-
-    # 16. Crear todas las respuestas
     new_answers = []
 
-    for answer in sync_data.answers:
-        new_answer = SurveyAnswer(
-            survey_id=new_survey.id,
-            form_field_id=answer.form_field_id,
-            value_text=answer.value_text,
-            value_number=answer.value_number,
-            value_date=answer.value_date,
-            value_boolean=answer.value_boolean,
-            field_option_id=answer.field_option_id,
+    try:
+        # flush obtiene el ID de Survey sin cerrar la transacción.
+        db.flush()
+
+        # Crear todas las respuestas dentro de la misma transacción.
+        for answer in sync_data.answers:
+            new_answer = SurveyAnswer(
+                survey_id=new_survey.id,
+                form_field_id=answer.form_field_id,
+                value_text=answer.value_text,
+                value_number=answer.value_number,
+                value_date=answer.value_date,
+                value_boolean=answer.value_boolean,
+                field_option_id=answer.field_option_id,
+            )
+
+            db.add(new_answer)
+            new_answers.append(new_answer)
+
+        # Survey + SurveyAnswers se confirman juntos.
+        db.commit()
+
+    except IntegrityError:
+        # Cualquier error de integridad invalida la transacción actual.
+        db.rollback()
+
+        # Puede ocurrir que dos sincronizaciones con el mismo UUID
+        # lleguen prácticamente al mismo tiempo.
+        existing_survey = db.scalar(
+            select(Survey).where(
+                Survey.uuid == sync_data.uuid
+            )
         )
 
-        db.add(new_answer)
-        new_answers.append(new_answer)
+        if existing_survey is not None:
+            existing_answers = db.scalars(
+                select(SurveyAnswer)
+                .where(
+                    SurveyAnswer.survey_id == existing_survey.id
+                )
+                .order_by(SurveyAnswer.id)
+            ).all()
 
-    # 17. Un solo COMMIT para Survey + SurveyAnswers
-    db.commit()
+            response.status_code = status.HTTP_200_OK
 
-    # 18. Refrescar objetos antes de devolverlos
+            return {
+                "survey": existing_survey,
+                "answers": existing_answers,
+            }
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conflicto de integridad al sincronizar la encuesta",
+        )
+
+    except SQLAlchemyError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al guardar la encuesta",
+        )
+
     db.refresh(new_survey)
 
     for answer in new_answers:

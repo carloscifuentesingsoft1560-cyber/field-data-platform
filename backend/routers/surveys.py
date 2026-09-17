@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from backend.schemas.survey_sync import (
     SurveySyncCreate
     )
 
+from backend.schemas.survey_detail import SurveyDetailResponse
 
 router = APIRouter(
     prefix="/surveys",
@@ -497,4 +498,188 @@ def sync_survey(
     return {
         "survey": new_survey,
         "answers": new_answers,
+    }
+@router.get(
+    "/{survey_id}/detail",
+    response_model=SurveyDetailResponse,
+    responses={
+        404: {
+            "description": "Encuesta no encontrada"
+        }
+    },
+)
+def get_survey_detail(
+    survey_id: int,
+    db: Session = Depends(get_db),
+):
+    # 1. Buscar la encuesta
+    survey = db.scalar(
+        select(Survey).where(
+            Survey.id == survey_id
+        )
+    )
+
+    if survey is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Encuesta no encontrada",
+        )
+
+    # 2. Buscar la versión del formulario
+    version = db.scalar(
+        select(FormVersion).where(
+            FormVersion.id == survey.form_version_id
+        )
+    )
+
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Versión de formulario no encontrada",
+        )
+
+    # 3. Buscar el formulario
+    form = db.scalar(
+        select(Form).where(
+            Form.id == version.form_id
+        )
+    )
+
+    if form is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Formulario no encontrado",
+        )
+
+    # 4. Buscar el usuario que diligenció la encuesta
+    user = db.scalar(
+        select(User).where(
+            User.id == survey.user_id
+        )
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+
+    # 5. Obtener TODOS los campos de la versión.
+    #
+    # Usamos OUTER JOIN porque también queremos mostrar
+    # campos opcionales que no hayan sido respondidos.
+    rows = db.execute(
+        select(
+            FormField,
+            SurveyAnswer,
+            FieldOption,
+        )
+        .outerjoin(
+            SurveyAnswer,
+            and_(
+                SurveyAnswer.form_field_id == FormField.id,
+                SurveyAnswer.survey_id == survey.id,
+            ),
+        )
+        .outerjoin(
+            FieldOption,
+            SurveyAnswer.field_option_id == FieldOption.id,
+        )
+        .where(
+            FormField.form_version_id == survey.form_version_id
+        )
+        .order_by(
+            FormField.field_order
+        )
+    ).all()
+
+    # 6. Construir las respuestas enriquecidas
+    answers = []
+
+    for field, answer, option in rows:
+        answers.append(
+            {
+                "answer_id": (
+                    answer.id
+                    if answer is not None
+                    else None
+                ),
+
+                "form_field_id": field.id,
+                "field_name": field.name,
+                "field_type": field.field_type,
+                "field_order": field.field_order,
+                "is_required": field.is_required,
+
+                "answered": answer is not None,
+
+                "value_text": (
+                    answer.value_text
+                    if answer is not None
+                    else None
+                ),
+
+                "value_number": (
+                    answer.value_number
+                    if answer is not None
+                    else None
+                ),
+
+                "value_date": (
+                    answer.value_date
+                    if answer is not None
+                    else None
+                ),
+
+                "value_boolean": (
+                    answer.value_boolean
+                    if answer is not None
+                    else None
+                ),
+
+                "field_option_id": (
+                    answer.field_option_id
+                    if answer is not None
+                    else None
+                ),
+
+                "option_label": (
+                    option.label
+                    if option is not None
+                    else None
+                ),
+
+                "option_value": (
+                    option.value
+                    if option is not None
+                    else None
+                ),
+            }
+        )
+
+    # 7. Devolver toda la encuesta en una sola respuesta
+    return {
+        "id": survey.id,
+        "uuid": survey.uuid,
+
+        "project_id": form.project_id,
+
+        "form_id": form.id,
+        "form_name": form.name,
+
+        "form_version_id": version.id,
+        "version_number": version.version_number,
+
+        "user_id": user.id,
+        "employee_number": user.employee_number,
+
+        "status": survey.status,
+
+        "latitude": survey.latitude,
+        "longitude": survey.longitude,
+
+        "captured_at": survey.captured_at,
+        "received_at": survey.received_at,
+
+        "answers": answers,
     }

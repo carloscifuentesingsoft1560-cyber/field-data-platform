@@ -10,6 +10,7 @@ from backend.routers import (
     field_options, 
     surveys,
     survey_answers,
+    exports,
 )
 
 app = FastAPI()
@@ -23,6 +24,7 @@ app.include_router(form_fields.router)
 app.include_router(field_options.router)
 app.include_router(surveys.router)
 app.include_router(survey_answers.router)
+app.include_router(exports.router)
 
 
 @app.get("/")

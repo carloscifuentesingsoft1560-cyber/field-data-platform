@@ -2,7 +2,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from backend.schemas.survey_answer import (
+    SurveyAnswerCorrectionResponse,
+)
 
 
 class SurveyDetailAnswer(BaseModel):
@@ -24,6 +28,15 @@ class SurveyDetailAnswer(BaseModel):
     field_option_id: int | None = None
     option_label: str | None = None
     option_value: str | None = None
+
+    was_corrected: bool = False
+    correction_count: int = 0
+
+    corrections: list[
+        SurveyAnswerCorrectionResponse
+    ] = Field(
+        default_factory=list
+    )
 
 
 class SurveyDetailResponse(BaseModel):

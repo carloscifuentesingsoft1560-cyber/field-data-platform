@@ -1,36 +1,50 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Response,
+    status,
+)
 from sqlalchemy import and_, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import (
+    IntegrityError,
+    SQLAlchemyError,
+)
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import (
-    Survey,
-    SurveyAnswer,
-    FormVersion,
+    FieldOption,
     Form,
     FormField,
-    FieldOption,
+    FormVersion,
+    Survey,
+    SurveyAnswer,
+    SurveyAnswerCorrection,
     User,
     UserProject,
 )
 from backend.schemas.survey import SurveyResponse
-
-
+from backend.schemas.survey_detail import (
+    SurveyDetailResponse,
+)
 from backend.schemas.survey_sync import (
+    SurveySyncCreate,
     SurveySyncResponse,
-    SurveySyncCreate
-    )
+)
 
-from backend.schemas.survey_detail import SurveyDetailResponse
 
 router = APIRouter(
     prefix="/surveys",
     tags=["surveys"],
 )
 
+
+# ============================================================
+# LISTAR ENCUESTAS
+# ============================================================
 
 @router.get(
     "/",
@@ -47,6 +61,10 @@ def get_surveys(
 
     return surveys
 
+
+# ============================================================
+# BUSCAR ENCUESTA POR UUID
+# ============================================================
 
 @router.get(
     "/by-uuid/{survey_uuid}",
@@ -76,32 +94,9 @@ def get_survey_by_uuid(
     return survey
 
 
-@router.get(
-    "/{survey_id}",
-    response_model=SurveyResponse,
-    responses={
-        404: {
-            "description": "Encuesta no encontrada"
-        }
-    },
-)
-def get_survey(
-    survey_id: int,
-    db: Session = Depends(get_db),
-):
-    survey = db.scalar(
-        select(Survey).where(
-            Survey.id == survey_id
-        )
-    )
-
-    if survey is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Encuesta no encontrada",
-        )
-
-    return survey
+# ============================================================
+# SINCRONIZAR ENCUESTA
+# ============================================================
 
 @router.post(
     "/sync",
@@ -109,16 +104,25 @@ def get_survey(
     status_code=status.HTTP_201_CREATED,
     responses={
         200: {
-            "description": "La encuesta ya había sido sincronizada"
+            "description": (
+                "La encuesta ya había sido sincronizada"
+            )
         },
         400: {
-            "description": "Datos de encuesta o respuestas inválidos"
+            "description": (
+                "Datos de encuesta o respuestas inválidos"
+            )
         },
         403: {
-            "description": "Usuario sin acceso al proyecto"
+            "description": (
+                "Usuario sin acceso al proyecto"
+            )
         },
         404: {
-            "description": "Versión, formulario, usuario o campo no encontrado"
+            "description": (
+                "Versión, formulario, usuario "
+                "o campo no encontrado"
+            )
         },
     },
 )
@@ -127,8 +131,10 @@ def sync_survey(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    # 1. Verificar si esta encuesta ya fue sincronizada
-    #    UUID funciona como identificador único generado por el dispositivo.
+    # --------------------------------------------------------
+    # 1. Idempotencia por UUID
+    # --------------------------------------------------------
+
     existing_survey = db.scalar(
         select(Survey).where(
             Survey.uuid == sync_data.uuid
@@ -139,39 +145,55 @@ def sync_survey(
         existing_answers = db.scalars(
             select(SurveyAnswer)
             .where(
-                SurveyAnswer.survey_id == existing_survey.id
+                SurveyAnswer.survey_id
+                == existing_survey.id
             )
-            .order_by(SurveyAnswer.id)
+            .order_by(
+                SurveyAnswer.id
+            )
         ).all()
 
-        response.status_code = status.HTTP_200_OK
+        response.status_code = (
+            status.HTTP_200_OK
+        )
 
         return {
             "survey": existing_survey,
             "answers": existing_answers,
         }
 
-    # 2. Verificar que la versión del formulario exista
+    # --------------------------------------------------------
+    # 2. Versión
+    # --------------------------------------------------------
+
     version = db.scalar(
         select(FormVersion).where(
-            FormVersion.id == sync_data.form_version_id
+            FormVersion.id
+            == sync_data.form_version_id
         )
     )
 
     if version is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Versión de formulario no encontrada",
+            detail=(
+                "Versión de formulario no encontrada"
+            ),
         )
 
-    # 3. Solo se pueden diligenciar versiones publicadas
     if version.status != "published":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Solo se pueden sincronizar versiones publicadas",
+            detail=(
+                "Solo se pueden sincronizar "
+                "versiones publicadas"
+            ),
         )
 
-    # 4. Obtener el formulario
+    # --------------------------------------------------------
+    # 3. Formulario
+    # --------------------------------------------------------
+
     form = db.scalar(
         select(Form).where(
             Form.id == version.form_id
@@ -184,14 +206,16 @@ def sync_survey(
             detail="Formulario no encontrado",
         )
 
-    # 5. El formulario debe estar activo
     if not form.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El formulario no está activo",
         )
 
-    # 6. Verificar que el usuario exista
+    # --------------------------------------------------------
+    # 4. Usuario
+    # --------------------------------------------------------
+
     user = db.scalar(
         select(User).where(
             User.id == sync_data.user_id
@@ -204,31 +228,42 @@ def sync_survey(
             detail="Usuario no encontrado",
         )
 
-    # 7. El usuario debe estar activo
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El usuario no está activo",
         )
 
-    # 8. Verificar que el usuario pertenezca al proyecto
+    # --------------------------------------------------------
+    # 5. Asignación al proyecto
+    # --------------------------------------------------------
+
     user_project = db.scalar(
         select(UserProject).where(
-            UserProject.user_id == sync_data.user_id,
-            UserProject.project_id == form.project_id,
+            UserProject.user_id
+            == sync_data.user_id,
+            UserProject.project_id
+            == form.project_id,
         )
     )
 
     if user_project is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="El usuario no está asignado a este proyecto",
+            detail=(
+                "El usuario no está asignado "
+                "a este proyecto"
+            ),
         )
 
-    # 9. Obtener todos los campos de la versión
+    # --------------------------------------------------------
+    # 6. Campos de la versión
+    # --------------------------------------------------------
+
     fields = db.scalars(
         select(FormField).where(
-            FormField.form_version_id == version.id
+            FormField.form_version_id
+            == version.id
         )
     ).all()
 
@@ -237,42 +272,63 @@ def sync_survey(
         for field in fields
     }
 
-    # 10. Obtener los IDs de campos enviados por el dispositivo
     answer_field_ids = [
         answer.form_field_id
         for answer in sync_data.answers
     ]
 
-    # 11. No permitir el mismo campo dos veces
-    if len(answer_field_ids) != len(set(answer_field_ids)):
+    # --------------------------------------------------------
+    # 7. Campos duplicados
+    # --------------------------------------------------------
+
+    if (
+        len(answer_field_ids)
+        != len(set(answer_field_ids))
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede responder dos veces el mismo campo",
+            detail=(
+                "No se puede responder dos veces "
+                "el mismo campo"
+            ),
         )
 
-    # 12. Todos los campos enviados deben pertenecer
-    #     a la misma versión del formulario
+    # --------------------------------------------------------
+    # 8. Campos pertenecen a la versión
+    # --------------------------------------------------------
+
     for answer in sync_data.answers:
-        if answer.form_field_id not in fields_by_id:
+        if (
+            answer.form_field_id
+            not in fields_by_id
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"El campo {answer.form_field_id} no pertenece "
-                    "a la versión del formulario"
+                    f"El campo "
+                    f"{answer.form_field_id} "
+                    "no pertenece a la versión "
+                    "del formulario"
                 ),
             )
 
-    # 13. Verificar campos obligatorios
+    # --------------------------------------------------------
+    # 9. Campos obligatorios
+    # --------------------------------------------------------
+
     required_field_ids = {
         field.id
         for field in fields
         if field.is_required
     }
 
-    submitted_field_ids = set(answer_field_ids)
+    submitted_field_ids = set(
+        answer_field_ids
+    )
 
     missing_required = (
-        required_field_ids - submitted_field_ids
+        required_field_ids
+        - submitted_field_ids
     )
 
     if missing_required:
@@ -282,21 +338,37 @@ def sync_survey(
                 "Faltan campos obligatorios: "
                 + ", ".join(
                     str(field_id)
-                    for field_id in sorted(missing_required)
+                    for field_id
+                    in sorted(
+                        missing_required
+                    )
                 )
             ),
         )
 
-    # 14. Validar el tipo de cada respuesta
+    # --------------------------------------------------------
+    # 10. Validar tipos
+    # --------------------------------------------------------
+
     for answer in sync_data.answers:
-        field = fields_by_id[answer.form_field_id]
+        field = fields_by_id[
+            answer.form_field_id
+        ]
 
         # TEXT / TEXTAREA
-        if field.field_type in ("text", "textarea"):
+        if field.field_type in (
+            "text",
+            "textarea",
+        ):
             if answer.value_text is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} requiere value_text",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "requiere value_text"
+                    ),
                 )
 
             if (
@@ -306,16 +378,26 @@ def sync_survey(
                 or answer.field_option_id is not None
             ):
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} solo admite value_text",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "solo admite value_text"
+                    ),
                 )
 
         # NUMBER
         elif field.field_type == "number":
             if answer.value_number is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} requiere value_number",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "requiere value_number"
+                    ),
                 )
 
             if (
@@ -325,16 +407,26 @@ def sync_survey(
                 or answer.field_option_id is not None
             ):
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} solo admite value_number",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "solo admite value_number"
+                    ),
                 )
 
         # DATE
         elif field.field_type == "date":
             if answer.value_date is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} requiere value_date",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "requiere value_date"
+                    ),
                 )
 
             if (
@@ -344,16 +436,26 @@ def sync_survey(
                 or answer.field_option_id is not None
             ):
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} solo admite value_date",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "solo admite value_date"
+                    ),
                 )
 
         # BOOLEAN
         elif field.field_type == "boolean":
             if answer.value_boolean is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} requiere value_boolean",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "requiere value_boolean"
+                    ),
                 )
 
             if (
@@ -363,31 +465,46 @@ def sync_survey(
                 or answer.field_option_id is not None
             ):
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} solo admite value_boolean",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "solo admite value_boolean"
+                    ),
                 )
 
         # SELECT
         elif field.field_type == "select":
             if answer.field_option_id is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} requiere field_option_id",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "requiere field_option_id"
+                    ),
                 )
 
             option = db.scalar(
                 select(FieldOption).where(
-                    FieldOption.id == answer.field_option_id,
-                    FieldOption.form_field_id == field.id,
+                    FieldOption.id
+                    == answer.field_option_id,
+                    FieldOption.form_field_id
+                    == field.id,
                 )
             )
 
             if option is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
                     detail=(
-                        f"La opción seleccionada no pertenece "
-                        f"al campo {field.id}"
+                        "La opción seleccionada "
+                        "no pertenece al campo "
+                        f"{field.id}"
                     ),
                 )
 
@@ -398,24 +515,33 @@ def sync_survey(
                 or answer.value_boolean is not None
             ):
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El campo {field.id} solo admite field_option_id",
+                    status_code=(
+                        status.HTTP_400_BAD_REQUEST
+                    ),
+                    detail=(
+                        f"El campo {field.id} "
+                        "solo admite field_option_id"
+                    ),
                 )
 
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"Tipo de campo no soportado: "
+                    "Tipo de campo no soportado: "
                     f"{field.field_type}"
                 ),
             )
 
-    # 15. Crear la encuesta.
-    #     Todavía NO hacemos commit.
+    # --------------------------------------------------------
+    # 11. Crear encuesta
+    # --------------------------------------------------------
+
     new_survey = Survey(
         uuid=sync_data.uuid,
-        form_version_id=sync_data.form_version_id,
+        form_version_id=(
+            sync_data.form_version_id
+        ),
         user_id=sync_data.user_id,
         status="submitted",
         latitude=sync_data.latitude,
@@ -428,36 +554,48 @@ def sync_survey(
     new_answers = []
 
     try:
-        # flush obtiene el ID de Survey sin cerrar la transacción.
         db.flush()
 
-        # Crear todas las respuestas dentro de la misma transacción.
         for answer in sync_data.answers:
             new_answer = SurveyAnswer(
                 survey_id=new_survey.id,
-                form_field_id=answer.form_field_id,
-                value_text=answer.value_text,
-                value_number=answer.value_number,
-                value_date=answer.value_date,
-                value_boolean=answer.value_boolean,
-                field_option_id=answer.field_option_id,
+                form_field_id=(
+                    answer.form_field_id
+                ),
+                value_text=(
+                    answer.value_text
+                ),
+                value_number=(
+                    answer.value_number
+                ),
+                value_date=(
+                    answer.value_date
+                ),
+                value_boolean=(
+                    answer.value_boolean
+                ),
+                field_option_id=(
+                    answer.field_option_id
+                ),
             )
 
-            db.add(new_answer)
-            new_answers.append(new_answer)
+            db.add(
+                new_answer
+            )
 
-        # Survey + SurveyAnswers se confirman juntos.
+            new_answers.append(
+                new_answer
+            )
+
         db.commit()
 
     except IntegrityError:
-        # Cualquier error de integridad invalida la transacción actual.
         db.rollback()
 
-        # Puede ocurrir que dos sincronizaciones con el mismo UUID
-        # lleguen prácticamente al mismo tiempo.
         existing_survey = db.scalar(
             select(Survey).where(
-                Survey.uuid == sync_data.uuid
+                Survey.uuid
+                == sync_data.uuid
             )
         )
 
@@ -465,12 +603,17 @@ def sync_survey(
             existing_answers = db.scalars(
                 select(SurveyAnswer)
                 .where(
-                    SurveyAnswer.survey_id == existing_survey.id
+                    SurveyAnswer.survey_id
+                    == existing_survey.id
                 )
-                .order_by(SurveyAnswer.id)
+                .order_by(
+                    SurveyAnswer.id
+                )
             ).all()
 
-            response.status_code = status.HTTP_200_OK
+            response.status_code = (
+                status.HTTP_200_OK
+            )
 
             return {
                 "survey": existing_survey,
@@ -479,32 +622,51 @@ def sync_survey(
 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Conflicto de integridad al sincronizar la encuesta",
+            detail=(
+                "Conflicto de integridad "
+                "al sincronizar la encuesta"
+            ),
         )
 
     except SQLAlchemyError:
         db.rollback()
 
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al guardar la encuesta",
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=(
+                "Error al guardar la encuesta"
+            ),
         )
 
-    db.refresh(new_survey)
+    db.refresh(
+        new_survey
+    )
 
     for answer in new_answers:
-        db.refresh(answer)
+        db.refresh(
+            answer
+        )
 
     return {
         "survey": new_survey,
         "answers": new_answers,
     }
+
+
+# ============================================================
+# DETALLE COMPLETO DE ENCUESTA
+# ============================================================
+
 @router.get(
     "/{survey_id}/detail",
     response_model=SurveyDetailResponse,
     responses={
         404: {
-            "description": "Encuesta no encontrada"
+            "description": (
+                "Encuesta no encontrada"
+            )
         }
     },
 )
@@ -512,7 +674,10 @@ def get_survey_detail(
     survey_id: int,
     db: Session = Depends(get_db),
 ):
-    # 1. Buscar la encuesta
+    # --------------------------------------------------------
+    # 1. Encuesta
+    # --------------------------------------------------------
+
     survey = db.scalar(
         select(Survey).where(
             Survey.id == survey_id
@@ -525,20 +690,29 @@ def get_survey_detail(
             detail="Encuesta no encontrada",
         )
 
-    # 2. Buscar la versión del formulario
+    # --------------------------------------------------------
+    # 2. Versión
+    # --------------------------------------------------------
+
     version = db.scalar(
         select(FormVersion).where(
-            FormVersion.id == survey.form_version_id
+            FormVersion.id
+            == survey.form_version_id
         )
     )
 
     if version is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Versión de formulario no encontrada",
+            detail=(
+                "Versión de formulario no encontrada"
+            ),
         )
 
-    # 3. Buscar el formulario
+    # --------------------------------------------------------
+    # 3. Formulario
+    # --------------------------------------------------------
+
     form = db.scalar(
         select(Form).where(
             Form.id == version.form_id
@@ -551,7 +725,10 @@ def get_survey_detail(
             detail="Formulario no encontrado",
         )
 
-    # 4. Buscar el usuario que diligenció la encuesta
+    # --------------------------------------------------------
+    # 4. Usuario que diligenció
+    # --------------------------------------------------------
+
     user = db.scalar(
         select(User).where(
             User.id == survey.user_id
@@ -564,10 +741,10 @@ def get_survey_detail(
             detail="Usuario no encontrado",
         )
 
-    # 5. Obtener TODOS los campos de la versión.
-    #
-    # Usamos OUTER JOIN porque también queremos mostrar
-    # campos opcionales que no hayan sido respondidos.
+    # --------------------------------------------------------
+    # 5. Campos + respuestas + opción
+    # --------------------------------------------------------
+
     rows = db.execute(
         select(
             FormField,
@@ -577,26 +754,87 @@ def get_survey_detail(
         .outerjoin(
             SurveyAnswer,
             and_(
-                SurveyAnswer.form_field_id == FormField.id,
-                SurveyAnswer.survey_id == survey.id,
+                SurveyAnswer.form_field_id
+                == FormField.id,
+                SurveyAnswer.survey_id
+                == survey.id,
             ),
         )
         .outerjoin(
             FieldOption,
-            SurveyAnswer.field_option_id == FieldOption.id,
+            SurveyAnswer.field_option_id
+            == FieldOption.id,
         )
         .where(
-            FormField.form_version_id == survey.form_version_id
+            FormField.form_version_id
+            == survey.form_version_id
         )
         .order_by(
             FormField.field_order
         )
     ).all()
 
-    # 6. Construir las respuestas enriquecidas
+    # --------------------------------------------------------
+    # 6. IDs de respuestas
+    # --------------------------------------------------------
+
+    answer_ids = [
+        answer.id
+        for field, answer, option in rows
+        if answer is not None
+    ]
+
+    # --------------------------------------------------------
+    # 7. Cargar correcciones de una sola vez
+    # --------------------------------------------------------
+
+    corrections_by_answer_id = {}
+
+    if answer_ids:
+        corrections = db.scalars(
+            select(
+                SurveyAnswerCorrection
+            )
+            .where(
+                SurveyAnswerCorrection
+                .survey_answer_id
+                .in_(answer_ids)
+            )
+            .order_by(
+                SurveyAnswerCorrection.corrected_at,
+                SurveyAnswerCorrection.id,
+            )
+        ).all()
+
+        for correction in corrections:
+            correction_list = (
+                corrections_by_answer_id.setdefault(
+                    correction.survey_answer_id,
+                    [],
+                )
+            )
+
+            correction_list.append(
+                correction
+            )
+
+    # --------------------------------------------------------
+    # 8. Construir detalle
+    # --------------------------------------------------------
+
     answers = []
 
     for field, answer, option in rows:
+        if answer is not None:
+            answer_corrections = (
+                corrections_by_answer_id.get(
+                    answer.id,
+                    [],
+                )
+            )
+        else:
+            answer_corrections = []
+
         answers.append(
             {
                 "answer_id": (
@@ -605,13 +843,29 @@ def get_survey_detail(
                     else None
                 ),
 
-                "form_field_id": field.id,
-                "field_name": field.name,
-                "field_type": field.field_type,
-                "field_order": field.field_order,
-                "is_required": field.is_required,
+                "form_field_id": (
+                    field.id
+                ),
 
-                "answered": answer is not None,
+                "field_name": (
+                    field.name
+                ),
+
+                "field_type": (
+                    field.field_type
+                ),
+
+                "field_order": (
+                    field.field_order
+                ),
+
+                "is_required": (
+                    field.is_required
+                ),
+
+                "answered": (
+                    answer is not None
+                ),
 
                 "value_text": (
                     answer.value_text
@@ -654,32 +908,114 @@ def get_survey_detail(
                     if option is not None
                     else None
                 ),
+
+                "was_corrected": (
+                    len(
+                        answer_corrections
+                    ) > 0
+                ),
+
+                "correction_count": (
+                    len(
+                        answer_corrections
+                    )
+                ),
+
+                "corrections": (
+                    answer_corrections
+                ),
             }
         )
 
-    # 7. Devolver toda la encuesta en una sola respuesta
+    # --------------------------------------------------------
+    # 9. Respuesta completa
+    # --------------------------------------------------------
+
     return {
         "id": survey.id,
         "uuid": survey.uuid,
 
-        "project_id": form.project_id,
+        "project_id": (
+            form.project_id
+        ),
 
-        "form_id": form.id,
-        "form_name": form.name,
+        "form_id": (
+            form.id
+        ),
 
-        "form_version_id": version.id,
-        "version_number": version.version_number,
+        "form_name": (
+            form.name
+        ),
 
-        "user_id": user.id,
-        "employee_number": user.employee_number,
+        "form_version_id": (
+            version.id
+        ),
 
-        "status": survey.status,
+        "version_number": (
+            version.version_number
+        ),
 
-        "latitude": survey.latitude,
-        "longitude": survey.longitude,
+        "user_id": (
+            user.id
+        ),
 
-        "captured_at": survey.captured_at,
-        "received_at": survey.received_at,
+        "employee_number": (
+            user.employee_number
+        ),
+
+        "status": (
+            survey.status
+        ),
+
+        "latitude": (
+            survey.latitude
+        ),
+
+        "longitude": (
+            survey.longitude
+        ),
+
+        "captured_at": (
+            survey.captured_at
+        ),
+
+        "received_at": (
+            survey.received_at
+        ),
 
         "answers": answers,
     }
+
+
+# ============================================================
+# CONSULTAR ENCUESTA
+# ============================================================
+
+@router.get(
+    "/{survey_id}",
+    response_model=SurveyResponse,
+    responses={
+        404: {
+            "description": (
+                "Encuesta no encontrada"
+            )
+        }
+    },
+)
+def get_survey(
+    survey_id: int,
+    db: Session = Depends(get_db),
+):
+    survey = db.scalar(
+        select(Survey).where(
+            Survey.id == survey_id
+        )
+    )
+
+    if survey is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Encuesta no encontrada",
+        )
+
+    return survey

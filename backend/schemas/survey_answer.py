@@ -15,6 +15,17 @@ class SurveyAnswerCreate(BaseModel):
     field_option_id: int | None = None
 
 
+class SurveyAnswerUpdate(BaseModel):
+    corrected_by_user_id: int
+    reason: str
+
+    value_text: str | None = None
+    value_number: Decimal | None = None
+    value_date: date | None = None
+    value_boolean: bool | None = None
+    field_option_id: int | None = None
+
+
 class SurveyAnswerResponse(BaseModel):
     id: int
     survey_id: int
@@ -31,3 +42,33 @@ class SurveyAnswerResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+
+class SurveyAnswerCorrectionResponse(BaseModel):
+    id: int
+    survey_answer_id: int
+    corrected_by_user_id: int
+
+    old_value_text: str | None
+    old_value_number: Decimal | None
+    old_value_date: date | None
+    old_value_boolean: bool | None
+    old_field_option_id: int | None
+
+    new_value_text: str | None
+    new_value_number: Decimal | None
+    new_value_date: date | None
+    new_value_boolean: bool | None
+    new_field_option_id: int | None
+
+    reason: str | None
+    corrected_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class SurveyAnswerCorrectionResult(BaseModel):
+    answer: SurveyAnswerResponse
+    correction: SurveyAnswerCorrectionResponse

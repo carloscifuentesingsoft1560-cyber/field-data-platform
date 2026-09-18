@@ -346,3 +346,81 @@ class SurveyAnswer(Base):
         server_default=func.now(),
         nullable=False
     )
+
+class SurveyAnswerCorrection(Base):
+    __tablename__ = "survey_answer_corrections"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
+    survey_answer_id: Mapped[int] = mapped_column(
+        ForeignKey("survey_answers.id"),
+        nullable=False
+    )
+
+    corrected_by_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    # --------------------------------------------------------
+    # VALOR ANTERIOR
+    # --------------------------------------------------------
+
+    old_value_text: Mapped[str | None] = mapped_column(
+        nullable=True
+    )
+
+    old_value_number: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4),
+        nullable=True
+    )
+
+    old_value_date: Mapped[date | None] = mapped_column(
+        nullable=True
+    )
+
+    old_value_boolean: Mapped[bool | None] = mapped_column(
+        nullable=True
+    )
+
+    old_field_option_id: Mapped[int | None] = mapped_column(
+        ForeignKey("field_options.id"),
+        nullable=True
+    )
+
+    # --------------------------------------------------------
+    # VALOR NUEVO
+    # --------------------------------------------------------
+
+    new_value_text: Mapped[str | None] = mapped_column(
+        nullable=True
+    )
+
+    new_value_number: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4),
+        nullable=True
+    )
+
+    new_value_date: Mapped[date | None] = mapped_column(
+        nullable=True
+    )
+
+    new_value_boolean: Mapped[bool | None] = mapped_column(
+        nullable=True
+    )
+
+    new_field_option_id: Mapped[int | None] = mapped_column(
+        ForeignKey("field_options.id"),
+        nullable=True
+    )
+
+    reason: Mapped[str | None] = mapped_column(
+        nullable=True
+    )
+
+    corrected_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        nullable=False
+    )

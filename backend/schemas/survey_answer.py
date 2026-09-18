@@ -4,6 +4,10 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 
+# ============================================================
+# CREACIÓN DE RESPUESTA
+# ============================================================
+
 class SurveyAnswerCreate(BaseModel):
     survey_id: int
     form_field_id: int
@@ -15,6 +19,10 @@ class SurveyAnswerCreate(BaseModel):
     field_option_id: int | None = None
 
 
+# ============================================================
+# CORRECCIÓN DE RESPUESTA
+# ============================================================
+
 class SurveyAnswerUpdate(BaseModel):
     corrected_by_user_id: int
     reason: str
@@ -25,6 +33,10 @@ class SurveyAnswerUpdate(BaseModel):
     value_boolean: bool | None = None
     field_option_id: int | None = None
 
+
+# ============================================================
+# RESPUESTA NORMAL
+# ============================================================
 
 class SurveyAnswerResponse(BaseModel):
     id: int
@@ -43,6 +55,10 @@ class SurveyAnswerResponse(BaseModel):
         "from_attributes": True
     }
 
+
+# ============================================================
+# HISTORIAL DE CORRECCIÓN
+# ============================================================
 
 class SurveyAnswerCorrectionResponse(BaseModel):
     id: int
@@ -68,6 +84,10 @@ class SurveyAnswerCorrectionResponse(BaseModel):
         "from_attributes": True
     }
 
+
+# ============================================================
+# RESULTADO DEL PATCH
+# ============================================================
 
 class SurveyAnswerCorrectionResult(BaseModel):
     answer: SurveyAnswerResponse

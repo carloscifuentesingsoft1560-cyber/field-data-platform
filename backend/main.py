@@ -18,6 +18,9 @@ from backend.routers.form_versions import (
 from backend.routers.roles import (
     router as roles_router,
 )
+from backend.routers.auth import (
+    router as auth_router,
+)
 from backend.routers import (
     form_fields,
     field_options,
@@ -29,6 +32,10 @@ from backend.routers import (
 
 app = FastAPI()
 
+
+app.include_router(
+    auth_router
+)
 
 app.include_router(
     projects_router
@@ -78,7 +85,7 @@ app.include_router(
 @app.get("/")
 def root():
     return {
-        "message": "Field Data Platform API"
+        "message": (
+            "Field Data Platform API"
+        )
     }
-
-

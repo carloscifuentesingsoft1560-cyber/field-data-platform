@@ -25,16 +25,27 @@ from backend.models import (
     UserProject,
 )
 from backend.schemas.survey_answer import (
-    SurveyAnswerCorrectionResponse as SurveyAnswerCorrectionResponseSchema,
-    SurveyAnswerCorrectionResult as SurveyAnswerCorrectionResultSchema,
-    SurveyAnswerResponse as SurveyAnswerResponseSchema,
-    SurveyAnswerUpdate as SurveyAnswerUpdateSchema,
+    SurveyAnswerCorrectionResponse
+    as SurveyAnswerCorrectionResponseSchema,
+    SurveyAnswerCorrectionResult
+    as SurveyAnswerCorrectionResultSchema,
+    SurveyAnswerResponse
+    as SurveyAnswerResponseSchema,
+    SurveyAnswerUpdate
+    as SurveyAnswerUpdateSchema,
+)
+from backend.security import (
+    get_current_user,
+    require_control_role,
 )
 
 
 router = APIRouter(
     prefix="/survey-answers",
     tags=["survey-answers"],
+    dependencies=[
+        Depends(get_current_user)
+    ],
 )
 
 
@@ -230,8 +241,9 @@ def validate_correction_value(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    "La opción seleccionada no pertenece "
-                    f"al campo {field.id}"
+                    "La opción seleccionada "
+                    "no pertenece al campo "
+                    f"{field.id}"
                 ),
             )
 
@@ -361,7 +373,9 @@ def get_survey_answer(
 
 @router.patch(
     "/{answer_id}",
-    response_model=SurveyAnswerCorrectionResultSchema,
+    response_model=(
+        SurveyAnswerCorrectionResultSchema
+    ),
     responses={
         400: {
             "description": (
@@ -370,13 +384,14 @@ def get_survey_answer(
         },
         403: {
             "description": (
-                "Usuario sin acceso al proyecto"
+                "Rol no autorizado o usuario "
+                "sin acceso al proyecto"
             )
         },
         404: {
             "description": (
-                "Respuesta, campo, encuesta, "
-                "formulario o usuario no encontrado"
+                "Respuesta, campo, encuesta "
+                "o formulario no encontrado"
             )
         },
     },
@@ -385,6 +400,9 @@ def correct_survey_answer(
     answer_id: int,
     answer_data: SurveyAnswerUpdateSchema,
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_control_role
+    ),
 ):
     # --------------------------------------------------------
     # 1. RESPUESTA
@@ -427,7 +445,8 @@ def correct_survey_answer(
 
     survey = db.scalar(
         select(Survey).where(
-            Survey.id == answer.survey_id
+            Survey.id
+            == answer.survey_id
         )
     )
 
@@ -485,30 +504,7 @@ def correct_survey_answer(
     # 6. USUARIO QUE CORRIGE
     # --------------------------------------------------------
 
-    correcting_user = db.scalar(
-        select(User).where(
-            User.id
-            == answer_data.corrected_by_user_id
-        )
-    )
-
-    if correcting_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "Usuario que realiza la corrección "
-                "no encontrado"
-            ),
-        )
-
-    if not correcting_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "El usuario que realiza la corrección "
-                "no está activo"
-            ),
-        )
+    correcting_user = current_user
 
     # --------------------------------------------------------
     # 7. ACCESO AL PROYECTO
@@ -726,7 +722,8 @@ def get_answer_corrections(
             SurveyAnswerCorrection
         )
         .where(
-            SurveyAnswerCorrection.survey_answer_id
+            SurveyAnswerCorrection
+            .survey_answer_id
             == answer_id
         )
         .order_by(

@@ -24,7 +24,6 @@ class SurveyAnswerCreate(BaseModel):
 # ============================================================
 
 class SurveyAnswerUpdate(BaseModel):
-    corrected_by_user_id: int
     reason: str
 
     value_text: str | None = None

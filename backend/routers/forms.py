@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,39 +12,65 @@ from backend.schemas.form import (
     FormCreate,
     FormResponse,
     FormUpdate,
-    )
+)
+from backend.security import (
+    get_current_user,
+    require_control_role,
+)
+
 
 router = APIRouter(
     prefix="/forms",
-    tags=["forms"]
+    tags=["forms"],
+    dependencies=[
+        Depends(get_current_user)
+    ],
 )
+
 
 @router.post(
     "/",
-    response_model = FormResponse,
-    status_code = 201,
+    response_model=FormResponse,
+    status_code=201,
+    dependencies=[
+        Depends(require_control_role)
+    ],
     responses={
-        404:{"description": "Proyecto no encontrado"}
-    }
+        404: {
+            "description": (
+                "Proyecto no encontrado"
+            )
+        },
+        403: {
+            "description": (
+                "No autorizado por rol"
+            )
+        },
+    },
 )
 def create_form(
-    form:FormCreate,
-    db: Session = Depends(get_db)
-): 
+    form: FormCreate,
+    db: Session = Depends(get_db),
+):
     project = db.scalar(
         select(Project).where(
-            Project.id == form.project_id
+            Project.id
+            == form.project_id
         )
     )
+
     if not project:
         raise HTTPException(
-            status_code= 404,
-            detail= "Proyecto no encontrado"
+            status_code=404,
+            detail=(
+                "Proyecto no encontrado"
+            ),
         )
-    db_form =Form(
-        project_id = form.project_id,
-        name = form.name,
-        description = form.description
+
+    db_form = Form(
+        project_id=form.project_id,
+        name=form.name,
+        description=form.description,
     )
 
     db.add(db_form)
@@ -48,28 +78,29 @@ def create_form(
     db.refresh(db_form)
 
     return db_form
+
+
 @router.get(
     "/",
-    response_model = list[FormResponse]
+    response_model=list[FormResponse],
 )
-
 def get_forms(
-    db: Session = Depends(get_db)
-): 
+    db: Session = Depends(get_db),
+):
     forms = db.scalars(
         select(Form)
     ).all()
 
     return forms
 
+
 @router.get(
     "/{form_id}",
-    response_model = FormResponse
+    response_model=FormResponse,
 )
-
 def get_form(
     form_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     form = db.scalar(
         select(Form).where(
@@ -80,19 +111,32 @@ def get_form(
     if not form:
         raise HTTPException(
             status_code=404,
-            detail="Formulario  no encontrado"
+            detail=(
+                "Formulario no encontrado"
+            ),
         )
 
     return form
 
+
 @router.patch(
     "/{form_id}",
-    response_model = FormResponse 
+    response_model=FormResponse,
+    dependencies=[
+        Depends(require_control_role)
+    ],
+    responses={
+        403: {
+            "description": (
+                "No autorizado por rol"
+            )
+        }
+    },
 )
 def update_form(
     form_id: int,
     form_data: FormUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     form = db.scalar(
         select(Form).where(
@@ -103,15 +147,25 @@ def update_form(
     if not form:
         raise HTTPException(
             status_code=404,
-            detail="Formulario no encontrado"
+            detail=(
+                "Formulario no encontrado"
+            ),
         )
 
-    update_data = form_data.model_dump(
-        exclude_unset=True
+    update_data = (
+        form_data.model_dump(
+            exclude_unset=True
+        )
     )
 
-    for field, value in update_data.items():
-        setattr(form, field, value)
+    for field, value in (
+        update_data.items()
+    ):
+        setattr(
+            form,
+            field,
+            value,
+        )
 
     db.commit()
     db.refresh(form)

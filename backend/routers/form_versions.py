@@ -1,53 +1,88 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+)
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Form, FormVersion
+from backend.models import (
+    Form,
+    FormVersion,
+)
 from backend.schemas.form_version import (
     FormVersionCreate,
     FormVersionResponse,
 )
+from backend.security import (
+    get_current_user,
+    require_control_role,
+)
+
 
 router = APIRouter(
     prefix="/form-versions",
-    tags=["form-versions"]
+    tags=["form-versions"],
+    dependencies=[
+        Depends(get_current_user)
+    ],
 )
+
 
 @router.post(
     "/",
     response_model=FormVersionResponse,
-    status_code=201
+    status_code=201,
+    dependencies=[
+        Depends(require_control_role)
+    ],
+    responses={
+        403: {
+            "description": (
+                "No autorizado por rol"
+            )
+        }
+    },
 )
-
 def create_form_version(
     version_data: FormVersionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     form = db.scalar(
         select(Form).where(
-            Form.id == version_data.form_id
+            Form.id
+            == version_data.form_id
         )
     )
 
     if not form:
         raise HTTPException(
             status_code=404,
-            detail="Formulario no encontrado"
+            detail=(
+                "Formulario no encontrado"
+            ),
         )
+
     last_version = db.scalar(
         select(
-            func.max(FormVersion.version_number)
+            func.max(
+                FormVersion.version_number
+            )
         ).where(
-            FormVersion.form_id == version_data.form_id
+            FormVersion.form_id
+            == version_data.form_id
         )
     )
-    next_version = (last_version or 0) + 1
+
+    next_version = (
+        last_version or 0
+    ) + 1
 
     new_version = FormVersion(
-        form_id = version_data.form_id,
-        version_number = next_version,
-        status ="draft"
+        form_id=version_data.form_id,
+        version_number=next_version,
+        status="draft",
     )
 
     db.add(new_version)
@@ -59,60 +94,86 @@ def create_form_version(
 
 @router.get(
     "/form/{form_id}",
-    response_model=list[FormVersionResponse]
+    response_model=list[
+        FormVersionResponse
+    ],
 )
-
 def get_form_versions(
     form_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     versions = db.scalars(
-        select(FormVersion).where(
-            FormVersion.form_id == form_id
-        ).order_by(
+        select(FormVersion)
+        .where(
+            FormVersion.form_id
+            == form_id
+        )
+        .order_by(
             FormVersion.version_number
         )
     ).all()
 
     return versions
 
+
 @router.patch(
     "/{version_id}/publish",
-    response_model=FormVersionResponse
+    response_model=FormVersionResponse,
+    dependencies=[
+        Depends(require_control_role)
+    ],
+    responses={
+        403: {
+            "description": (
+                "No autorizado por rol"
+            )
+        }
+    },
 )
 def publish_form_version(
-    version_id:int,
-    db: Session = Depends(get_db)
+    version_id: int,
+    db: Session = Depends(get_db),
 ):
     version = db.scalar(
         select(FormVersion).where(
-            FormVersion.id == version_id
+            FormVersion.id
+            == version_id
         )
     )
 
     if not version:
         raise HTTPException(
             status_code=404,
-            detail= "Versión de formulario no encontrada"
+            detail=(
+                "Versión de formulario "
+                "no encontrada"
+            ),
         )
+
     if version.status == "published":
         raise HTTPException(
             status_code=400,
-            detail="La versión ya está publicada"
+            detail=(
+                "La versión ya está "
+                "publicada"
+            ),
         )
 
     published_version = db.scalar(
         select(FormVersion).where(
-            FormVersion.form_id == version.form_id,
-            FormVersion.status == "published"
+            FormVersion.form_id
+            == version.form_id,
+            FormVersion.status
+            == "published",
         )
     )
 
     if published_version:
-        published_version.status ="archived"
-    
-    version.status = "published"
+        published_version.status = (
+            "archived"
+        )
 
+    version.status = "published"
 
     db.commit()
     db.refresh(version)

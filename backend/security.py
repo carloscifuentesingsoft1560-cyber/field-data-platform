@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from collections.abc import Callable
 
 import jwt
 from dotenv import load_dotenv
@@ -18,10 +19,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import User
+from backend.models import Role, User
 
 
 load_dotenv()
+
+
+# ============================================================
+# ROLES DEL SISTEMA
+# ============================================================
+
+CONTROL_ROLES = {
+    "director",
+    "jefe_nacional",
+    "coordinador",
+    "analista",
+}
+
+OPERATION_ROLES = {
+    "auxiliar",
+    "vendedor",
+    "mercaimpulso",
+}
 
 
 # ============================================================
@@ -215,3 +234,57 @@ def get_current_user(
         )
 
     return user
+
+
+# ============================================================
+# AUTORIZACIÓN POR ROL
+# ============================================================
+
+def require_roles(
+    *allowed_roles: str,
+) -> Callable:
+    def role_checker(
+        current_user: User = Depends(
+            get_current_user
+        ),
+        db: Session = Depends(
+            get_db
+        ),
+    ) -> User:
+        role = db.scalar(
+            select(Role).where(
+                Role.id
+                == current_user.role_id
+            )
+        )
+
+        if role is None:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_403_FORBIDDEN
+                ),
+                detail=(
+                    "El usuario no tiene "
+                    "un rol válido"
+                ),
+            )
+
+        if role.name not in allowed_roles:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_403_FORBIDDEN
+                ),
+                detail=(
+                    "No tiene permisos para "
+                    "realizar esta operación"
+                ),
+            )
+
+        return current_user
+
+    return role_checker
+
+
+require_control_role = require_roles(
+    *CONTROL_ROLES
+)

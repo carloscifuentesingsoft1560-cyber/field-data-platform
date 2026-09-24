@@ -62,6 +62,75 @@ class AnswerValues(TypedDict):
 
 
 # ============================================================
+# VALIDAR ACCESO A LA ENCUESTA
+# ============================================================
+
+def validate_survey_project_access(
+    survey: Survey,
+    current_user: User,
+    db: Session,
+) -> tuple[
+    FormVersion,
+    Form,
+]:
+    version = db.scalar(
+        select(FormVersion).where(
+            FormVersion.id
+            == survey.form_version_id
+        )
+    )
+
+    if version is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Versión de formulario "
+                "no encontrada"
+            ),
+        )
+
+    form = db.scalar(
+        select(Form).where(
+            Form.id == version.form_id
+        )
+    )
+
+    if form is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Formulario no encontrado"
+            ),
+        )
+
+    user_project = db.scalar(
+        select(UserProject).where(
+            UserProject.user_id
+            == current_user.id,
+            UserProject.project_id
+            == form.project_id,
+        )
+    )
+
+    if user_project is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
+            detail=(
+                "El usuario no está asignado "
+                "a este proyecto"
+            ),
+        )
+
+    return version, form
+
+
+# ============================================================
 # VALIDACIÓN DEL NUEVO VALOR
 # ============================================================
 
@@ -93,7 +162,9 @@ def validate_correction_value(
     ):
         if answer_data.value_text is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "requiere value_text"
@@ -107,7 +178,9 @@ def validate_correction_value(
             or answer_data.field_option_id is not None
         ):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "solo admite value_text"
@@ -125,7 +198,9 @@ def validate_correction_value(
     elif field.field_type == "number":
         if answer_data.value_number is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "requiere value_number"
@@ -139,7 +214,9 @@ def validate_correction_value(
             or answer_data.field_option_id is not None
         ):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "solo admite value_number"
@@ -157,7 +234,9 @@ def validate_correction_value(
     elif field.field_type == "date":
         if answer_data.value_date is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "requiere value_date"
@@ -171,7 +250,9 @@ def validate_correction_value(
             or answer_data.field_option_id is not None
         ):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "solo admite value_date"
@@ -189,7 +270,9 @@ def validate_correction_value(
     elif field.field_type == "boolean":
         if answer_data.value_boolean is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "requiere value_boolean"
@@ -203,7 +286,9 @@ def validate_correction_value(
             or answer_data.field_option_id is not None
         ):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "solo admite value_boolean"
@@ -221,7 +306,9 @@ def validate_correction_value(
     elif field.field_type == "select":
         if answer_data.field_option_id is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "requiere field_option_id"
@@ -239,7 +326,9 @@ def validate_correction_value(
 
         if option is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     "La opción seleccionada "
                     "no pertenece al campo "
@@ -254,7 +343,9 @@ def validate_correction_value(
             or answer_data.value_boolean is not None
         ):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     f"El campo {field.id} "
                     "solo admite field_option_id"
@@ -271,7 +362,9 @@ def validate_correction_value(
 
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
             detail=(
                 "Tipo de campo no soportado: "
                 f"{field.field_type}"
@@ -291,16 +384,27 @@ def validate_correction_value(
         SurveyAnswerResponseSchema
     ],
     responses={
+        403: {
+            "description": (
+                "Usuario sin acceso "
+                "al proyecto"
+            )
+        },
         404: {
             "description": (
                 "Encuesta no encontrada"
             )
-        }
+        },
     },
 )
 def get_answers_by_survey(
     survey_id: int,
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     survey = db.scalar(
         select(Survey).where(
@@ -310,9 +414,19 @@ def get_answers_by_survey(
 
     if survey is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Encuesta no encontrada",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Encuesta no encontrada"
+            ),
         )
+
+    validate_survey_project_access(
+        survey=survey,
+        current_user=current_user,
+        db=db,
+    )
 
     answers = db.scalars(
         select(SurveyAnswer)
@@ -339,18 +453,31 @@ def get_answers_by_survey(
 
 @router.get(
     "/{answer_id}",
-    response_model=SurveyAnswerResponseSchema,
+    response_model=(
+        SurveyAnswerResponseSchema
+    ),
     responses={
+        403: {
+            "description": (
+                "Usuario sin acceso "
+                "al proyecto"
+            )
+        },
         404: {
             "description": (
                 "Respuesta no encontrada"
             )
-        }
+        },
     },
 )
 def get_survey_answer(
     answer_id: int,
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     answer = db.scalar(
         select(SurveyAnswer).where(
@@ -360,9 +487,35 @@ def get_survey_answer(
 
     if answer is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Respuesta no encontrada",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Respuesta no encontrada"
+            ),
         )
+
+    survey = db.scalar(
+        select(Survey).where(
+            Survey.id == answer.survey_id
+        )
+    )
+
+    if survey is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Encuesta no encontrada"
+            ),
+        )
+
+    validate_survey_project_access(
+        survey=survey,
+        current_user=current_user,
+        db=db,
+    )
 
     return answer
 
@@ -399,7 +552,9 @@ def get_survey_answer(
 def correct_survey_answer(
     answer_id: int,
     answer_data: SurveyAnswerUpdateSchema,
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
     current_user: User = Depends(
         require_control_role
     ),
@@ -416,8 +571,12 @@ def correct_survey_answer(
 
     if answer is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Respuesta no encontrada",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Respuesta no encontrada"
+            ),
         )
 
     # --------------------------------------------------------
@@ -433,9 +592,12 @@ def correct_survey_answer(
 
     if field is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
             detail=(
-                "Campo de formulario no encontrado"
+                "Campo de formulario "
+                "no encontrado"
             ),
         )
 
@@ -452,13 +614,19 @@ def correct_survey_answer(
 
     if survey is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Encuesta no encontrada",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Encuesta no encontrada"
+            ),
         )
 
     if survey.status != "submitted":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
             detail=(
                 "Solo se pueden corregir "
                 "encuestas enviadas"
@@ -478,9 +646,12 @@ def correct_survey_answer(
 
     if version is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
             detail=(
-                "Versión de formulario no encontrada"
+                "Versión de formulario "
+                "no encontrada"
             ),
         )
 
@@ -496,8 +667,12 @@ def correct_survey_answer(
 
     if form is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Formulario no encontrado",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Formulario no encontrado"
+            ),
         )
 
     # --------------------------------------------------------
@@ -521,7 +696,9 @@ def correct_survey_answer(
 
     if user_project is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
             detail=(
                 "El usuario no está asignado "
                 "a este proyecto"
@@ -532,11 +709,15 @@ def correct_survey_answer(
     # 8. MOTIVO
     # --------------------------------------------------------
 
-    reason = answer_data.reason.strip()
+    reason = (
+        answer_data.reason.strip()
+    )
 
     if not reason:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
             detail=(
                 "Debe indicar el motivo "
                 "de la corrección"
@@ -558,11 +739,21 @@ def correct_survey_answer(
     # --------------------------------------------------------
 
     old_values: AnswerValues = {
-        "value_text": answer.value_text,
-        "value_number": answer.value_number,
-        "value_date": answer.value_date,
-        "value_boolean": answer.value_boolean,
-        "field_option_id": answer.field_option_id,
+        "value_text": (
+            answer.value_text
+        ),
+        "value_number": (
+            answer.value_number
+        ),
+        "value_date": (
+            answer.value_date
+        ),
+        "value_boolean": (
+            answer.value_boolean
+        ),
+        "field_option_id": (
+            answer.field_option_id
+        ),
     }
 
     # --------------------------------------------------------
@@ -571,7 +762,9 @@ def correct_survey_answer(
 
     if old_values == new_values:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
             detail=(
                 "El nuevo valor es igual "
                 "al valor actual"
@@ -583,41 +776,63 @@ def correct_survey_answer(
     # --------------------------------------------------------
 
     correction = SurveyAnswerCorrection(
-        survey_answer_id=answer.id,
+        survey_answer_id=(
+            answer.id
+        ),
         corrected_by_user_id=(
             correcting_user.id
         ),
 
         old_value_text=(
-            old_values["value_text"]
+            old_values[
+                "value_text"
+            ]
         ),
         old_value_number=(
-            old_values["value_number"]
+            old_values[
+                "value_number"
+            ]
         ),
         old_value_date=(
-            old_values["value_date"]
+            old_values[
+                "value_date"
+            ]
         ),
         old_value_boolean=(
-            old_values["value_boolean"]
+            old_values[
+                "value_boolean"
+            ]
         ),
         old_field_option_id=(
-            old_values["field_option_id"]
+            old_values[
+                "field_option_id"
+            ]
         ),
 
         new_value_text=(
-            new_values["value_text"]
+            new_values[
+                "value_text"
+            ]
         ),
         new_value_number=(
-            new_values["value_number"]
+            new_values[
+                "value_number"
+            ]
         ),
         new_value_date=(
-            new_values["value_date"]
+            new_values[
+                "value_date"
+            ]
         ),
         new_value_boolean=(
-            new_values["value_boolean"]
+            new_values[
+                "value_boolean"
+            ]
         ),
         new_field_option_id=(
-            new_values["field_option_id"]
+            new_values[
+                "field_option_id"
+            ]
         ),
 
         reason=reason,
@@ -628,23 +843,33 @@ def correct_survey_answer(
     # --------------------------------------------------------
 
     answer.value_text = (
-        new_values["value_text"]
+        new_values[
+            "value_text"
+        ]
     )
 
     answer.value_number = (
-        new_values["value_number"]
+        new_values[
+            "value_number"
+        ]
     )
 
     answer.value_date = (
-        new_values["value_date"]
+        new_values[
+            "value_date"
+        ]
     )
 
     answer.value_boolean = (
-        new_values["value_boolean"]
+        new_values[
+            "value_boolean"
+        ]
     )
 
     answer.field_option_id = (
-        new_values["field_option_id"]
+        new_values[
+            "field_option_id"
+        ]
     )
 
     # --------------------------------------------------------
@@ -666,7 +891,8 @@ def correct_survey_answer(
                 status.HTTP_500_INTERNAL_SERVER_ERROR
             ),
             detail=(
-                "Error al guardar la corrección"
+                "Error al guardar "
+                "la corrección"
             ),
         )
 
@@ -694,28 +920,67 @@ def correct_survey_answer(
         SurveyAnswerCorrectionResponseSchema
     ],
     responses={
+        403: {
+            "description": (
+                "Usuario sin acceso "
+                "al proyecto"
+            )
+        },
         404: {
             "description": (
                 "Respuesta no encontrada"
             )
-        }
+        },
     },
 )
 def get_answer_corrections(
     answer_id: int,
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     answer = db.scalar(
         select(SurveyAnswer).where(
-            SurveyAnswer.id == answer_id
+            SurveyAnswer.id
+            == answer_id
         )
     )
 
     if answer is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Respuesta no encontrada",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Respuesta no encontrada"
+            ),
         )
+
+    survey = db.scalar(
+        select(Survey).where(
+            Survey.id
+            == answer.survey_id
+        )
+    )
+
+    if survey is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Encuesta no encontrada"
+            ),
+        )
+
+    validate_survey_project_access(
+        survey=survey,
+        current_user=current_user,
+        db=db,
+    )
 
     corrections = db.scalars(
         select(
@@ -727,7 +992,8 @@ def get_answer_corrections(
             == answer_id
         )
         .order_by(
-            SurveyAnswerCorrection.corrected_at,
+            SurveyAnswerCorrection
+            .corrected_at,
             SurveyAnswerCorrection.id,
         )
     ).all()

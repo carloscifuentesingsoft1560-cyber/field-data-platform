@@ -5,7 +5,9 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from backend.schemas.survey import SurveyResponse
-from backend.schemas.survey_answer import SurveyAnswerResponse
+from backend.schemas.survey_answer import (
+    SurveyAnswerResponse,
+)
 
 
 class SurveySyncAnswerCreate(BaseModel):
@@ -21,7 +23,6 @@ class SurveySyncAnswerCreate(BaseModel):
 class SurveySyncCreate(BaseModel):
     uuid: UUID
     form_version_id: int
-    user_id: int
 
     latitude: float | None = Field(
         default=None,
@@ -37,9 +38,14 @@ class SurveySyncCreate(BaseModel):
 
     captured_at: datetime
 
-    answers: list[SurveySyncAnswerCreate]
+    answers: list[
+        SurveySyncAnswerCreate
+    ]
 
 
 class SurveySyncResponse(BaseModel):
     survey: SurveyResponse
-    answers: list[SurveyAnswerResponse]
+
+    answers: list[
+        SurveyAnswerResponse
+    ]

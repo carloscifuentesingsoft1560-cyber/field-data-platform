@@ -1,7 +1,13 @@
 import csv
 from io import BytesIO, StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Response,
+    status,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
@@ -17,7 +23,9 @@ from backend.models import (
     Survey,
     SurveyAnswer,
     User,
+    UserProject,
 )
+from backend.security import get_current_user
 
 
 router = APIRouter(
@@ -35,33 +43,28 @@ def get_answer_export_value(
     option: FieldOption | None,
 ):
     """
-    Convierte una SurveyAnswer en un valor fácil de exportar.
-    Se utiliza principalmente para CSV.
+    Convierte una respuesta en un valor adecuado
+    para exportación CSV.
     """
 
     if answer is None:
         return ""
 
-    # SELECT
     if answer.field_option_id is not None:
         if option is not None:
             return option.label
 
         return str(answer.field_option_id)
 
-    # TEXT / TEXTAREA
     if answer.value_text is not None:
         return answer.value_text
 
-    # NUMBER
     if answer.value_number is not None:
         return str(answer.value_number)
 
-    # DATE
     if answer.value_date is not None:
         return answer.value_date.isoformat()
 
-    # BOOLEAN
     if answer.value_boolean is not None:
         return (
             "true"
@@ -74,16 +77,21 @@ def get_answer_export_value(
 
 def get_export_data(
     form_version_id: int,
+    current_user: User,
     db: Session,
 ):
     """
-    Obtiene todos los datos necesarios para exportar
+    Obtiene los datos necesarios para exportar
     una versión de formulario.
 
-    Esta función es compartida por CSV y Excel.
+    Antes de acceder a las encuestas valida que
+    el usuario autenticado esté asignado al proyecto.
     """
 
-    # 1. Buscar versión
+    # --------------------------------------------------------
+    # 1. VERSIÓN DEL FORMULARIO
+    # --------------------------------------------------------
+
     version = db.scalar(
         select(FormVersion).where(
             FormVersion.id == form_version_id
@@ -96,7 +104,10 @@ def get_export_data(
             detail="Versión de formulario no encontrada",
         )
 
-    # 2. Buscar formulario
+    # --------------------------------------------------------
+    # 2. FORMULARIO
+    # --------------------------------------------------------
+
     form = db.scalar(
         select(Form).where(
             Form.id == version.form_id
@@ -109,7 +120,30 @@ def get_export_data(
             detail="Formulario no encontrado",
         )
 
-    # 3. Campos de la versión
+    # --------------------------------------------------------
+    # 3. VALIDAR ACCESO AL PROYECTO
+    # --------------------------------------------------------
+
+    user_project = db.scalar(
+        select(UserProject).where(
+            UserProject.user_id == current_user.id,
+            UserProject.project_id == form.project_id,
+        )
+    )
+
+    if user_project is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "El usuario no está asignado "
+                "a este proyecto"
+            ),
+        )
+
+    # --------------------------------------------------------
+    # 4. CAMPOS DE LA VERSIÓN
+    # --------------------------------------------------------
+
     fields = db.scalars(
         select(FormField)
         .where(
@@ -121,7 +155,10 @@ def get_export_data(
         )
     ).all()
 
-    # 4. Encuestas de esa versión
+    # --------------------------------------------------------
+    # 5. ENCUESTAS ENVIADAS
+    # --------------------------------------------------------
+
     survey_rows = db.execute(
         select(
             Survey,
@@ -146,7 +183,10 @@ def get_export_data(
         for survey, user in survey_rows
     ]
 
-    # 5. Respuestas agrupadas
+    # --------------------------------------------------------
+    # 6. RESPUESTAS
+    # --------------------------------------------------------
+
     answers_by_survey_and_field = {}
 
     if survey_ids:
@@ -199,6 +239,16 @@ def get_export_data(
                 "Archivo CSV generado correctamente"
             )
         },
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Usuario sin acceso al proyecto"
+            )
+        },
         404: {
             "description": (
                 "Versión o formulario no encontrado"
@@ -208,7 +258,12 @@ def get_export_data(
 )
 def export_form_version_csv(
     form_version_id: int,
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     (
         version,
@@ -217,11 +272,11 @@ def export_form_version_csv(
         survey_rows,
         answers_by_survey_and_field,
     ) = get_export_data(
-        form_version_id,
-        db,
+        form_version_id=form_version_id,
+        current_user=current_user,
+        db=db,
     )
 
-    # Crear CSV en memoria
     output = StringIO(
         newline=""
     )
@@ -232,7 +287,10 @@ def export_form_version_csv(
         lineterminator="\n",
     )
 
-    # Columnas generales
+    # --------------------------------------------------------
+    # ENCABEZADOS GENERALES
+    # --------------------------------------------------------
+
     headers = [
         "survey_id",
         "uuid",
@@ -249,7 +307,6 @@ def export_form_version_csv(
         "longitude",
     ]
 
-    # Cada pregunta se convierte en columna
     field_headers = [
         f"field_{field.id}_{field.name}"
         for field in fields
@@ -259,7 +316,10 @@ def export_form_version_csv(
         headers + field_headers
     )
 
-    # Una fila por encuesta
+    # --------------------------------------------------------
+    # FILAS
+    # --------------------------------------------------------
+
     for survey, user in survey_rows:
         row = [
             survey.id,
@@ -274,24 +334,25 @@ def export_form_version_csv(
             survey.captured_at.isoformat(),
             survey.received_at.isoformat(),
 
-            # En CSV usamos coma decimal
-            # para facilitar apertura directa
-            # con Excel en configuración colombiana.
             (
                 str(
                     survey.latitude
-                ).replace(".", ",")
-                if survey.latitude
-                is not None
+                ).replace(
+                    ".",
+                    ",",
+                )
+                if survey.latitude is not None
                 else ""
             ),
 
             (
                 str(
                     survey.longitude
-                ).replace(".", ",")
-                if survey.longitude
-                is not None
+                ).replace(
+                    ".",
+                    ",",
+                )
+                if survey.longitude is not None
                 else ""
             ),
         ]
@@ -316,8 +377,8 @@ def export_form_version_csv(
 
             field_values.append(
                 get_answer_export_value(
-                    answer,
-                    option,
+                    answer=answer,
+                    option=option,
                 )
             )
 
@@ -325,13 +386,16 @@ def export_form_version_csv(
             row + field_values
         )
 
+    # --------------------------------------------------------
     # UTF-8 + BOM
-    # Esto permite que Excel reconozca
-    # correctamente tildes, ñ, etc.
+    # --------------------------------------------------------
+
     csv_content = (
         "\ufeff"
         + output.getvalue()
-    ).encode("utf-8")
+    ).encode(
+        "utf-8"
+    )
 
     filename = (
         f"form_{form.id}"
@@ -365,6 +429,16 @@ def export_form_version_csv(
                 "Archivo Excel generado correctamente"
             )
         },
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Usuario sin acceso al proyecto"
+            )
+        },
         404: {
             "description": (
                 "Versión o formulario no encontrado"
@@ -374,7 +448,12 @@ def export_form_version_csv(
 )
 def export_form_version_xlsx(
     form_version_id: int,
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     (
         version,
@@ -383,21 +462,19 @@ def export_form_version_xlsx(
         survey_rows,
         answers_by_survey_and_field,
     ) = get_export_data(
-        form_version_id,
-        db,
+        form_version_id=form_version_id,
+        current_user=current_user,
+        db=db,
     )
 
-    # Crear libro Excel
     workbook = Workbook()
 
-    # Workbook() crea automáticamente
-    # una hoja real tipo Worksheet.
     worksheet = workbook.worksheets[0]
 
     worksheet.title = "Encuestas"
 
     # --------------------------------------------------------
-    # Encabezados
+    # ENCABEZADOS
     # --------------------------------------------------------
 
     headers = [
@@ -425,14 +502,13 @@ def export_form_version_xlsx(
         headers + field_headers
     )
 
-    # Negrita para encabezados
     for cell in worksheet[1]:
         cell.font = Font(
             bold=True
         )
 
     # --------------------------------------------------------
-    # Filas
+    # FILAS
     # --------------------------------------------------------
 
     for survey, user in survey_rows:
@@ -446,14 +522,8 @@ def export_form_version_xlsx(
             user.id,
             user.employee_number,
             survey.status,
-
-            # En XLSX se conservan como
-            # datetime reales.
             survey.captured_at,
             survey.received_at,
-
-            # En XLSX mantenemos
-            # coordenadas como números.
             survey.latitude,
             survey.longitude,
         ]
@@ -497,9 +567,7 @@ def export_form_version_xlsx(
                 answer.value_text
                 is not None
             ):
-                value = (
-                    answer.value_text
-                )
+                value = answer.value_text
 
             # NUMBER
             elif (
@@ -515,18 +583,14 @@ def export_form_version_xlsx(
                 answer.value_date
                 is not None
             ):
-                value = (
-                    answer.value_date
-                )
+                value = answer.value_date
 
             # BOOLEAN
             elif (
                 answer.value_boolean
                 is not None
             ):
-                value = (
-                    answer.value_boolean
-                )
+                value = answer.value_boolean
 
             field_values.append(
                 value
@@ -537,18 +601,19 @@ def export_form_version_xlsx(
         )
 
     # --------------------------------------------------------
-    # CONFIGURACIÓN VISUAL DEL EXCEL
+    # CONFIGURACIÓN VISUAL
     # --------------------------------------------------------
 
-    # Congelar encabezado
     worksheet.freeze_panes = "A2"
 
-    # Activar filtros
     worksheet.auto_filter.ref = (
         worksheet.dimensions
     )
 
-    # Ajustar ancho de columnas
+    # --------------------------------------------------------
+    # ANCHO DE COLUMNAS
+    # --------------------------------------------------------
+
     for column_number in range(
         1,
         worksheet.max_column + 1,
@@ -574,18 +639,11 @@ def export_form_version_xlsx(
                 continue
 
             value_length = len(
-                str(
-                    cell.value
-                )
+                str(cell.value)
             )
 
-            if (
-                value_length
-                > max_length
-            ):
-                max_length = (
-                    value_length
-                )
+            if value_length > max_length:
+                max_length = value_length
 
         worksheet.column_dimensions[
             column_letter
@@ -595,34 +653,35 @@ def export_form_version_xlsx(
         )
 
     # --------------------------------------------------------
-    # FORMATO DE COORDENADAS
+    # FORMATO COORDENADAS
     # --------------------------------------------------------
 
     for row_number in range(
         2,
         worksheet.max_row + 1,
     ):
-        # latitude = columna 12
         worksheet.cell(
             row=row_number,
             column=12,
-        ).number_format = "0.000000"
+        ).number_format = (
+            "0.000000"
+        )
 
-        # longitude = columna 13
         worksheet.cell(
             row=row_number,
             column=13,
-        ).number_format = "0.000000"
+        ).number_format = (
+            "0.000000"
+        )
 
     # --------------------------------------------------------
-    # FORMATO DE FECHAS
+    # FORMATO FECHAS
     # --------------------------------------------------------
 
     for row_number in range(
         2,
         worksheet.max_row + 1,
     ):
-        # captured_at
         worksheet.cell(
             row=row_number,
             column=10,
@@ -630,7 +689,6 @@ def export_form_version_xlsx(
             "yyyy-mm-dd hh:mm:ss"
         )
 
-        # received_at
         worksheet.cell(
             row=row_number,
             column=11,
@@ -639,7 +697,7 @@ def export_form_version_xlsx(
         )
 
     # --------------------------------------------------------
-    # GUARDAR ARCHIVO EN MEMORIA
+    # GUARDAR XLSX EN MEMORIA
     # --------------------------------------------------------
 
     output = BytesIO()

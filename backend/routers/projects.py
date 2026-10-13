@@ -4,11 +4,15 @@ from fastapi import (
     HTTPException,
     status,
 )
-from sqlalchemy import select
+from sqlalchemy import (
+    delete,
+    select,
+)
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import (
+    Form,
     Project,
     User,
     UserProject,
@@ -162,7 +166,7 @@ def create_project(
         db_project
     )
 
-    # Necesitamos obtener el ID antes del commit
+    # Obtenemos el ID antes del commit
     # para crear la asignación UserProject.
     db.flush()
 
@@ -175,7 +179,7 @@ def create_project(
         user_project
     )
 
-    # Proyecto + asignación se guardan
+    # Proyecto y asignación se guardan
     # dentro de la misma transacción.
     db.commit()
 
@@ -252,6 +256,11 @@ def get_project(
         404: {
             "description": (
                 "Project not found"
+            )
+        },
+        422: {
+            "description": (
+                "Fechas de proyecto inválidas"
             )
         },
     },
@@ -333,6 +342,11 @@ def update_project(
 @router.delete(
     "/projects/{project_id}",
     responses={
+        200: {
+            "description": (
+                "Proyecto eliminado correctamente"
+            )
+        },
         401: {
             "description": (
                 "Se requiere autenticación"
@@ -347,6 +361,12 @@ def update_project(
         404: {
             "description": (
                 "Project not found"
+            )
+        },
+        409: {
+            "description": (
+                "El proyecto tiene formularios "
+                "asociados y no puede eliminarse"
             )
         },
     },
@@ -365,6 +385,40 @@ def delete_project(
         current_user=current_user,
         db=db,
     )
+
+    # --------------------------------------------------------
+    # NO PERMITIR ELIMINAR PROYECTOS CON FORMULARIOS
+    # --------------------------------------------------------
+
+    existing_form = db.scalar(
+        select(Form.id).where(
+            Form.project_id == project.id
+        )
+    )
+
+    if existing_form is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "No se puede eliminar el proyecto "
+                "porque tiene formularios asociados"
+            ),
+        )
+
+    # --------------------------------------------------------
+    # ELIMINAR ASIGNACIONES USER_PROJECT
+    # --------------------------------------------------------
+
+    db.execute(
+        delete(UserProject).where(
+            UserProject.project_id
+            == project.id
+        )
+    )
+
+    # --------------------------------------------------------
+    # ELIMINAR PROYECTO
+    # --------------------------------------------------------
 
     db.delete(
         project

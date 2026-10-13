@@ -2,14 +2,18 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    status,
 )
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import (
+    Form,
     FormField,
     FormVersion,
+    User,
+    UserProject,
 )
 from backend.schemas.form_field import (
     FormFieldCreate,
@@ -26,43 +30,168 @@ from backend.security import (
 router = APIRouter(
     prefix="/form-fields",
     tags=["form-fields"],
-    dependencies=[
-        Depends(get_current_user)
-    ],
 )
 
 
-@router.post(
-    "/",
-    response_model=FormFieldResponse,
-    status_code=201,
-    dependencies=[
-        Depends(require_control_role)
-    ],
-)
-def create_form_field(
-    field_data: FormFieldCreate,
-    db: Session = Depends(get_db),
-):
+# ============================================================
+# FUNCIONES AUXILIARES
+# ============================================================
+
+def validate_version_access(
+    form_version_id: int,
+    current_user: User,
+    db: Session,
+) -> FormVersion:
+    """
+    Valida que la versión exista y que el usuario
+    esté asignado al proyecto al que pertenece
+    el formulario de la versión.
+    """
+
     version = db.scalar(
         select(FormVersion).where(
             FormVersion.id
-            == field_data.form_version_id
+            == form_version_id
         )
     )
 
-    if not version:
+    if version is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=(
                 "Versión de formulario "
                 "no encontrada"
             ),
         )
 
+    form = db.scalar(
+        select(Form).where(
+            Form.id == version.form_id
+        )
+    )
+
+    if form is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Formulario no encontrado",
+        )
+
+    user_project = db.scalar(
+        select(UserProject).where(
+            UserProject.user_id
+            == current_user.id,
+            UserProject.project_id
+            == form.project_id,
+        )
+    )
+
+    if user_project is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "El usuario no está asignado "
+                "a este proyecto"
+            ),
+        )
+
+    return version
+
+
+def validate_field_access(
+    field_id: int,
+    current_user: User,
+    db: Session,
+) -> tuple[
+    FormField,
+    FormVersion,
+]:
+    """
+    Valida que el campo exista y que el usuario
+    tenga acceso al proyecto de la versión
+    a la que pertenece.
+    """
+
+    field = db.scalar(
+        select(FormField).where(
+            FormField.id == field_id
+        )
+    )
+
+    if field is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Campo de formulario "
+                "no encontrado"
+            ),
+        )
+
+    version = validate_version_access(
+        form_version_id=field.form_version_id,
+        current_user=current_user,
+        db=db,
+    )
+
+    return (
+        field,
+        version,
+    )
+
+
+# ============================================================
+# CREAR CAMPO
+# ============================================================
+
+@router.post(
+    "/",
+    response_model=FormFieldResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {
+            "description": (
+                "Versión no editable o "
+                "orden duplicado"
+            )
+        },
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Rol no autorizado o usuario "
+                "sin acceso al proyecto"
+            )
+        },
+        404: {
+            "description": (
+                "Versión de formulario "
+                "no encontrada"
+            )
+        },
+    },
+)
+def create_form_field(
+    field_data: FormFieldCreate,
+    db: Session = Depends(
+        get_db
+    ),
+    current_user: User = Depends(
+        require_control_role
+    ),
+):
+    version = validate_version_access(
+        form_version_id=(
+            field_data.form_version_id
+        ),
+        current_user=current_user,
+        db=db,
+    )
+
     if version.status != "draft":
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Solo se pueden modificar "
                 "versiones en borrador"
@@ -78,9 +207,9 @@ def create_form_field(
         )
     )
 
-    if existing_field:
+    if existing_field is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Ya existe un campo con "
                 "ese orden en esta versión"
@@ -97,38 +226,62 @@ def create_form_field(
         is_required=field_data.is_required,
     )
 
-    db.add(new_field)
+    db.add(
+        new_field
+    )
+
     db.commit()
-    db.refresh(new_field)
+
+    db.refresh(
+        new_field
+    )
 
     return new_field
 
+
+# ============================================================
+# CONSULTAR CAMPOS DE UNA VERSIÓN
+# ============================================================
 
 @router.get(
     "/version/{form_version_id}",
     response_model=list[
         FormFieldResponse
     ],
+    responses={
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Usuario sin acceso "
+                "al proyecto"
+            )
+        },
+        404: {
+            "description": (
+                "Versión de formulario "
+                "no encontrada"
+            )
+        },
+    },
 )
 def get_form_fields_by_version(
     form_version_id: int,
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ):
-    version = db.scalar(
-        select(FormVersion).where(
-            FormVersion.id
-            == form_version_id
-        )
+    validate_version_access(
+        form_version_id=form_version_id,
+        current_user=current_user,
+        db=db,
     )
-
-    if not version:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Versión de formulario "
-                "no encontrada"
-            ),
-        )
 
     fields = db.scalars(
         select(FormField)
@@ -144,52 +297,61 @@ def get_form_fields_by_version(
     return fields
 
 
+# ============================================================
+# ACTUALIZAR CAMPO
+# ============================================================
+
 @router.patch(
     "/{field_id}",
     response_model=FormFieldResponse,
-    dependencies=[
-        Depends(require_control_role)
-    ],
+    responses={
+        400: {
+            "description": (
+                "Versión no editable o "
+                "orden duplicado"
+            )
+        },
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Rol no autorizado o usuario "
+                "sin acceso al proyecto"
+            )
+        },
+        404: {
+            "description": (
+                "Campo o versión "
+                "no encontrada"
+            )
+        },
+    },
 )
 def update_form_field(
     field_id: int,
     field_data: FormFieldUpdate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
+    current_user: User = Depends(
+        require_control_role
+    ),
 ):
-    field = db.scalar(
-        select(FormField).where(
-            FormField.id == field_id
-        )
+    (
+        field,
+        version,
+    ) = validate_field_access(
+        field_id=field_id,
+        current_user=current_user,
+        db=db,
     )
-
-    if not field:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Campo de formulario "
-                "no encontrado"
-            ),
-        )
-
-    version = db.scalar(
-        select(FormVersion).where(
-            FormVersion.id
-            == field.form_version_id
-        )
-    )
-
-    if not version:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Versión de formulario "
-                "no encontrada"
-            ),
-        )
 
     if version.status != "draft":
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Solo se pueden modificar "
                 "campos de versiones "
@@ -216,9 +378,11 @@ def update_form_field(
             )
         )
 
-        if existing_field:
+        if existing_field is not None:
             raise HTTPException(
-                status_code=400,
+                status_code=(
+                    status.HTTP_400_BAD_REQUEST
+                ),
                 detail=(
                     "Ya existe otro campo "
                     "con ese orden en esta "
@@ -236,56 +400,68 @@ def update_form_field(
         )
 
     db.commit()
-    db.refresh(field)
+
+    db.refresh(
+        field
+    )
 
     return field
 
 
+# ============================================================
+# ELIMINAR CAMPO
+# ============================================================
+
 @router.delete(
     "/{field_id}",
-    status_code=204,
-    dependencies=[
-        Depends(require_control_role)
-    ],
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        400: {
+            "description": (
+                "La versión no está "
+                "en borrador"
+            )
+        },
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Rol no autorizado o usuario "
+                "sin acceso al proyecto"
+            )
+        },
+        404: {
+            "description": (
+                "Campo o versión "
+                "no encontrada"
+            )
+        },
+    },
 )
 def delete_form_field(
     field_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
+    current_user: User = Depends(
+        require_control_role
+    ),
 ):
-    field = db.scalar(
-        select(FormField).where(
-            FormField.id == field_id
-        )
+    (
+        field,
+        version,
+    ) = validate_field_access(
+        field_id=field_id,
+        current_user=current_user,
+        db=db,
     )
-
-    if not field:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Campo de formulario "
-                "no encontrado"
-            ),
-        )
-
-    version = db.scalar(
-        select(FormVersion).where(
-            FormVersion.id
-            == field.form_version_id
-        )
-    )
-
-    if not version:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Versión de formulario "
-                "no encontrada"
-            ),
-        )
 
     if version.status != "draft":
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Solo se pueden eliminar "
                 "campos de versiones "
@@ -301,7 +477,10 @@ def delete_form_field(
         field.form_version_id
     )
 
-    db.delete(field)
+    db.delete(
+        field
+    )
+
     db.flush()
 
     fields_to_shift = db.scalars(
@@ -327,52 +506,61 @@ def delete_form_field(
     return None
 
 
+# ============================================================
+# REORDENAR CAMPO
+# ============================================================
+
 @router.patch(
     "/{field_id}/reorder",
     response_model=FormFieldResponse,
-    dependencies=[
-        Depends(require_control_role)
-    ],
+    responses={
+        400: {
+            "description": (
+                "Versión no editable o "
+                "orden inválido"
+            )
+        },
+        401: {
+            "description": (
+                "Se requiere autenticación"
+            )
+        },
+        403: {
+            "description": (
+                "Rol no autorizado o usuario "
+                "sin acceso al proyecto"
+            )
+        },
+        404: {
+            "description": (
+                "Campo o versión "
+                "no encontrada"
+            )
+        },
+    },
 )
 def reorder_form_field(
     field_id: int,
     reorder_data: FormFieldReorder,
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
+    current_user: User = Depends(
+        require_control_role
+    ),
 ):
-    field = db.scalar(
-        select(FormField).where(
-            FormField.id == field_id
-        )
+    (
+        field,
+        version,
+    ) = validate_field_access(
+        field_id=field_id,
+        current_user=current_user,
+        db=db,
     )
-
-    if not field:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Campo de formulario "
-                "no encontrado"
-            ),
-        )
-
-    version = db.scalar(
-        select(FormVersion).where(
-            FormVersion.id
-            == field.form_version_id
-        )
-    )
-
-    if not version:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Versión de formulario "
-                "no encontrada"
-            ),
-        )
 
     if version.status != "draft":
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Solo se pueden reordenar "
                 "campos de versiones "
@@ -391,7 +579,9 @@ def reorder_form_field(
         )
     ).all()
 
-    total_fields = len(fields)
+    total_fields = len(
+        fields
+    )
 
     if (
         reorder_data.new_order < 1
@@ -399,7 +589,7 @@ def reorder_form_field(
         > total_fields
     ):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "El nuevo orden debe estar "
                 f"entre 1 y {total_fields}"
@@ -445,6 +635,9 @@ def reorder_form_field(
         )
 
     db.commit()
-    db.refresh(field)
+
+    db.refresh(
+        field
+    )
 
     return field

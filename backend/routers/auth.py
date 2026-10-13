@@ -1,3 +1,8 @@
+from datetime import (
+    datetime,
+    timedelta,
+)
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -32,6 +37,14 @@ router = APIRouter(
 
 
 # ============================================================
+# CONFIGURACIÓN DE BLOQUEO
+# ============================================================
+
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+# ============================================================
 # LOGIN
 # ============================================================
 
@@ -49,6 +62,11 @@ router = APIRouter(
                 "Usuario inactivo"
             )
         },
+        423: {
+            "description": (
+                "Usuario temporalmente bloqueado"
+            )
+        },
     },
 )
 def login(
@@ -57,6 +75,10 @@ def login(
         get_db
     ),
 ):
+    # --------------------------------------------------------
+    # BUSCAR USUARIO
+    # --------------------------------------------------------
+
     user = db.scalar(
         select(User).where(
             User.employee_number
@@ -64,6 +86,8 @@ def login(
         )
     )
 
+    # Mantenemos el mismo mensaje para no revelar
+    # si un número de empleado existe o no.
     if user is None:
         raise HTTPException(
             status_code=(
@@ -75,10 +99,85 @@ def login(
             ),
         )
 
+    now = datetime.utcnow()
+
+    # --------------------------------------------------------
+    # VERIFICAR BLOQUEO ACTIVO
+    # --------------------------------------------------------
+
+    if (
+        user.locked_until is not None
+        and user.locked_until > now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=(
+                "La cuenta está temporalmente "
+                "bloqueada. Intente nuevamente "
+                "más tarde"
+            ),
+        )
+
+    # --------------------------------------------------------
+    # LIMPIAR BLOQUEO VENCIDO
+    # --------------------------------------------------------
+
+    if (
+        user.locked_until is not None
+        and user.locked_until <= now
+    ):
+        user.failed_login_attempts = 0
+        user.locked_until = None
+
+        db.commit()
+
+        db.refresh(
+            user
+        )
+
+    # --------------------------------------------------------
+    # VERIFICAR CONTRASEÑA
+    # --------------------------------------------------------
+
     if not verify_password(
         login_data.password,
         user.password_hash,
     ):
+        user.failed_login_attempts += 1
+
+        # ----------------------------------------------------
+        # QUINTO INTENTO FALLIDO
+        # ----------------------------------------------------
+
+        if (
+            user.failed_login_attempts
+            >= MAX_FAILED_LOGIN_ATTEMPTS
+        ):
+            user.locked_until = (
+                now
+                + timedelta(
+                    minutes=LOGIN_LOCKOUT_MINUTES
+                )
+            )
+
+            db.commit()
+
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail=(
+                    "La cuenta ha sido bloqueada "
+                    "temporalmente por múltiples "
+                    "intentos fallidos de inicio "
+                    "de sesión"
+                ),
+            )
+
+        # ----------------------------------------------------
+        # INTENTOS 1 A 4
+        # ----------------------------------------------------
+
+        db.commit()
+
         raise HTTPException(
             status_code=(
                 status.HTTP_401_UNAUTHORIZED
@@ -89,6 +188,10 @@ def login(
             ),
         )
 
+    # --------------------------------------------------------
+    # VERIFICAR USUARIO ACTIVO
+    # --------------------------------------------------------
+
     if not user.is_active:
         raise HTTPException(
             status_code=(
@@ -98,6 +201,28 @@ def login(
                 "El usuario está inactivo"
             ),
         )
+
+    # --------------------------------------------------------
+    # LOGIN CORRECTO
+    # REINICIAR CONTADOR Y BLOQUEO
+    # --------------------------------------------------------
+
+    if (
+        user.failed_login_attempts != 0
+        or user.locked_until is not None
+    ):
+        user.failed_login_attempts = 0
+        user.locked_until = None
+
+        db.commit()
+
+        db.refresh(
+            user
+        )
+
+    # --------------------------------------------------------
+    # GENERAR TOKEN
+    # --------------------------------------------------------
 
     access_token = (
         create_access_token(

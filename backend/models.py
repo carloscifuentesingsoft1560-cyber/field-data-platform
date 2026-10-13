@@ -1,64 +1,93 @@
 from decimal import Decimal
 
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+)
 
 from datetime import datetime
 from datetime import date
 from uuid import UUID
 
 from sqlalchemy import (
-    ForeignKey, 
-    func, 
+    ForeignKey,
+    func,
     UniqueConstraint,
     Uuid,
     Float,
     Numeric,
-    )
-
+)
 
 
 class Base(DeclarativeBase):
     pass
 
-class Project(Base):
-    __tablename__ ="projects"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+# ============================================================
+# PROJECT
+# ============================================================
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
+
     name: Mapped[str] = mapped_column()
-    description:Mapped[str | None] = mapped_column(
+
+    description: Mapped[str | None] = mapped_column(
         nullable=True
     )
-    status:Mapped[str] = mapped_column(
-            default="active"
+
+    status: Mapped[str] = mapped_column(
+        default="active"
     )
+
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         onupdate=func.now()
     )
-    start_date : Mapped[date] = mapped_column(
+
+    start_date: Mapped[date] = mapped_column(
         nullable=False
     )
+
     end_date: Mapped[date | None] = mapped_column(
-         nullable=True   
+        nullable=True
     )
+
+
+# ============================================================
+# ROLE
+# ============================================================
 
 class Role(Base):
-    __tablename__ ="roles"
+    __tablename__ = "roles"
 
-    id:Mapped[int]= mapped_column(
+    id: Mapped[int] = mapped_column(
         primary_key=True
     )
-    name:Mapped[str]= mapped_column(
+
+    name: Mapped[str] = mapped_column(
         unique=True,
         nullable=False
     )
 
+
+# ============================================================
+# USER
+# ============================================================
+
 class User(Base):
-    __tablename__ ='users'
-    id:Mapped[int] = mapped_column(
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(
         primary_key=True
     )
 
@@ -77,7 +106,7 @@ class User(Base):
     )
 
     role_id: Mapped[int] = mapped_column(
-        ForeignKey ("roles.id"),
+        ForeignKey("roles.id"),
         nullable=False
     )
 
@@ -85,12 +114,28 @@ class User(Base):
         default=True,
         nullable=False
     )
+
+    failed_login_attempts: Mapped[int] = mapped_column(
+        default=0,
+        server_default="0",
+        nullable=False
+    )
+
+    locked_until: Mapped[datetime | None] = mapped_column(
+        nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
     )
 
+
+# ============================================================
+# USER PROJECT
+# ============================================================
+
 class UserProject(Base):
-    __tablename__="user_projects"
+    __tablename__ = "user_projects"
 
     __table_args__ = (
         UniqueConstraint(
@@ -100,7 +145,7 @@ class UserProject(Base):
         ),
     )
 
-    id:Mapped[int] = mapped_column(
+    id: Mapped[int] = mapped_column(
         primary_key=True
     )
 
@@ -109,16 +154,21 @@ class UserProject(Base):
         nullable=False
     )
 
-    project_id:Mapped[int] = mapped_column(
+    project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id"),
         nullable=False
     )
 
+
+# ============================================================
+# FORM
+# ============================================================
+
 class Form(Base):
-    __tablename__ ="forms"
+    __tablename__ = "forms"
 
     id: Mapped[int] = mapped_column(
-        primary_key= True
+        primary_key=True
     )
 
     project_id: Mapped[int] = mapped_column(
@@ -129,33 +179,40 @@ class Form(Base):
     name: Mapped[str] = mapped_column(
         nullable=False
     )
+
     description: Mapped[str | None] = mapped_column(
         nullable=True
-
     )
 
     is_active: Mapped[bool] = mapped_column(
         default=True,
         nullable=False
     )
+
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
     )
 
-class FormVersion(Base):
-    __tablename__="form_versions"
 
-    __table_args__ =(
+# ============================================================
+# FORM VERSION
+# ============================================================
+
+class FormVersion(Base):
+    __tablename__ = "form_versions"
+
+    __table_args__ = (
         UniqueConstraint(
             "form_id",
             "version_number",
             name="uq_form_version"
         ),
     )
-    
-    id:Mapped[int] = mapped_column(
+
+    id: Mapped[int] = mapped_column(
         primary_key=True
     )
+
     form_id: Mapped[int] = mapped_column(
         ForeignKey("forms.id"),
         nullable=False
@@ -170,9 +227,14 @@ class FormVersion(Base):
         nullable=False
     )
 
-    created_at: Mapped[datetime]= mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         server_default=func.now()
     )
+
+
+# ============================================================
+# FORM FIELD
+# ============================================================
 
 class FormField(Base):
     __tablename__ = "form_fields"
@@ -185,31 +247,37 @@ class FormField(Base):
         ),
     )
 
-    id:Mapped[int] = mapped_column(
-        primary_key = True
+    id: Mapped[int] = mapped_column(
+        primary_key=True
     )
 
     form_version_id: Mapped[int] = mapped_column(
         ForeignKey("form_versions.id"),
-        nullable = False
+        nullable=False
     )
 
     name: Mapped[str] = mapped_column(
-        nullable = False
+        nullable=False
     )
 
     field_type: Mapped[str] = mapped_column(
-        nullable = False
+        nullable=False
     )
 
     field_order: Mapped[int] = mapped_column(
-        nullable = False 
+        nullable=False
     )
 
     is_required: Mapped[bool] = mapped_column(
-        default = False,
-        nullable = False
+        default=False,
+        nullable=False
     )
+
+
+# ============================================================
+# FIELD OPTION
+# ============================================================
+
 class FieldOption(Base):
     __tablename__ = "field_options"
 
@@ -217,14 +285,13 @@ class FieldOption(Base):
         UniqueConstraint(
             "form_field_id",
             "option_order",
-            name= "uq_field_option_order"
+            name="uq_field_option_order"
         ),
         UniqueConstraint(
             "form_field_id",
             "value",
             name="uq_field_option_value"
         ),
-
     )
 
     id: Mapped[int] = mapped_column(
@@ -233,20 +300,25 @@ class FieldOption(Base):
 
     form_field_id: Mapped[int] = mapped_column(
         ForeignKey("form_fields.id"),
-        nullable= False
+        nullable=False
     )
 
     label: Mapped[str] = mapped_column(
-        nullable= False
+        nullable=False
     )
 
     value: Mapped[str] = mapped_column(
-        nullable= False
+        nullable=False
     )
 
     option_order: Mapped[int] = mapped_column(
-        nullable= False
+        nullable=False
     )
+
+
+# ============================================================
+# SURVEY
+# ============================================================
 
 class Survey(Base):
     __tablename__ = "surveys"
@@ -294,6 +366,11 @@ class Survey(Base):
         server_default=func.now(),
         nullable=False
     )
+
+
+# ============================================================
+# SURVEY ANSWER
+# ============================================================
 
 class SurveyAnswer(Base):
     __tablename__ = "survey_answers"
@@ -346,6 +423,11 @@ class SurveyAnswer(Base):
         server_default=func.now(),
         nullable=False
     )
+
+
+# ============================================================
+# SURVEY ANSWER CORRECTION
+# ============================================================
 
 class SurveyAnswerCorrection(Base):
     __tablename__ = "survey_answer_corrections"

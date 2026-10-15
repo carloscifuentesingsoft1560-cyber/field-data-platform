@@ -1,0 +1,392 @@
+:root {
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color: #1f2937;
+  background: #f4f6f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: #f4f6f8;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ============================================================
+   LOGIN
+   ============================================================ */
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(
+      135deg,
+      #eef4ff 0%,
+      #f8fafc 55%,
+      #eef2f7 100%
+    );
+}
+
+.login-panel {
+  width: min(100%, 980px);
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(340px, 420px);
+  overflow: hidden;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow:
+    0 20px 60px
+    rgba(15, 23, 42, 0.12);
+}
+
+.login-brand {
+  min-height: 540px;
+  padding: 64px 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: #172554;
+  color: #ffffff;
+}
+
+.brand-badge {
+  width: 68px;
+  height: 68px;
+  margin-bottom: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: #2563eb;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.login-brand h1 {
+  margin: 0 0 14px;
+  font-size: clamp(
+    2rem,
+    4vw,
+    3.1rem
+  );
+  line-height: 1.05;
+}
+
+.login-brand p {
+  max-width: 420px;
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.7;
+}
+
+.login-form {
+  padding: 56px 42px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 22px;
+}
+
+.login-form h2 {
+  margin: 0 0 6px;
+  font-size: 1.8rem;
+}
+
+.form-description {
+  margin: 0;
+  color: #64748b;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #334155;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.login-form input:focus {
+  border-color: #2563eb;
+  box-shadow:
+    0 0 0 3px
+    rgba(37, 99, 235, 0.12);
+}
+
+.login-form button,
+.project-card button {
+  padding: 13px 18px;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.login-form button:hover:not(:disabled),
+.project-card button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.alert {
+  padding: 12px 14px;
+  border-radius: 10px;
+  line-height: 1.4;
+}
+
+.alert-error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+/* ============================================================
+   PROJECTS
+   ============================================================ */
+
+.center-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.projects-page {
+  min-height: 100vh;
+}
+
+.app-header {
+  min-height: 78px;
+  padding: 16px clamp(20px, 5vw, 64px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: #172554;
+  color: #ffffff;
+}
+
+.app-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.app-header p {
+  margin: 4px 0 0;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.user-area > div {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.user-area span {
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  text-transform: capitalize;
+}
+
+.secondary-button {
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 9px;
+  background: transparent;
+  color: #ffffff;
+}
+
+.content-container {
+  width: min(calc(100% - 40px), 1200px);
+  margin: 0 auto;
+  padding: 46px 0 72px;
+}
+
+.page-heading {
+  margin-bottom: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+}
+
+.page-heading h1 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 2rem;
+}
+
+.page-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(280px, 1fr)
+    );
+  gap: 20px;
+}
+
+.project-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow:
+    0 5px 18px
+    rgba(15, 23, 42, 0.05);
+}
+
+.card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.card-heading h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.project-card > p {
+  flex: 1;
+  margin: 0;
+  color: #64748b;
+  line-height: 1.55;
+}
+
+.status {
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.status-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-inactive {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.empty-state {
+  padding: 50px 24px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  background: #ffffff;
+  text-align: center;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 760px) {
+  .login-page {
+    padding: 0;
+  }
+
+  .login-panel {
+    min-height: 100vh;
+    grid-template-columns: 1fr;
+    border-radius: 0;
+  }
+
+  .login-brand {
+    min-height: auto;
+    padding: 36px 26px;
+  }
+
+  .login-brand h1 {
+    font-size: 2rem;
+  }
+
+  .login-form {
+    padding: 38px 26px;
+    justify-content: flex-start;
+  }
+
+  .app-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .user-area {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .content-container {
+    width: calc(100% - 28px);
+    padding-top: 32px;
+  }
+}

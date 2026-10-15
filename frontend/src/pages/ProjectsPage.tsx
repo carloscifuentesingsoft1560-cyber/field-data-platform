@@ -28,7 +28,9 @@ function ProjectsPage() {
   const navigate = useNavigate()
 
   const [user, setUser] =
-    useState<AuthUser | null>(null)
+    useState<AuthUser | null>(
+      null,
+    )
 
   const [projects, setProjects] =
     useState<Project[]>([])
@@ -53,7 +55,10 @@ function ProjectsPage() {
           ),
         ])
 
-        setUser(currentUser)
+        setUser(
+          currentUser,
+        )
+
         setProjects(
           projectsResponse.data,
         )
@@ -81,12 +86,16 @@ function ProjectsPage() {
           'No fue posible cargar los proyectos.',
         )
       } finally {
-        setIsLoading(false)
+        setIsLoading(
+          false,
+        )
       }
     }
 
     void loadPage()
-  }, [navigate])
+  }, [
+    navigate,
+  ])
 
 
   const handleLogout = () => {
@@ -161,11 +170,20 @@ function ProjectsPage() {
               para continuar.
             </p>
           </div>
+
+          <span className="project-count">
+            {projects.length}
+            {' '}
+            {projects.length === 1
+              ? 'proyecto'
+              : 'proyectos'}
+          </span>
         </div>
 
         {error && (
           <div
             className="alert alert-error"
+            role="alert"
           >
             {error}
           </div>
@@ -179,8 +197,9 @@ function ProjectsPage() {
               </h2>
 
               <p>
-                No tienes proyectos
-                asociados actualmente.
+                Actualmente no tienes
+                proyectos asociados a
+                tu usuario.
               </p>
             </div>
           )}
@@ -217,11 +236,32 @@ function ProjectsPage() {
                     'Sin descripción.'}
                 </p>
 
+                <div className="project-dates">
+                  <span>
+                    Inicio:
+                    {' '}
+                    {project.start_date}
+                  </span>
+
+                  {project.end_date && (
+                    <span>
+                      Finalización:
+                      {' '}
+                      {project.end_date}
+                    </span>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   disabled={
                     project.status !==
                     'active'
+                  }
+                  onClick={() =>
+                    navigate(
+                      `/projects/${project.id}`,
+                    )
                   }
                 >
                   Abrir proyecto

@@ -14,6 +14,7 @@ import {
 
 import LoginPage from '../pages/LoginPage'
 import ProjectsPage from '../pages/ProjectsPage'
+import ProjectFormsPage from '../pages/ProjectFormsPage'
 
 
 interface ProtectedRouteProps {
@@ -62,6 +63,15 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/projects/:projectId"
+        element={
+          <ProtectedRoute>
+            <ProjectFormsPage />
           </ProtectedRoute>
         }
       />

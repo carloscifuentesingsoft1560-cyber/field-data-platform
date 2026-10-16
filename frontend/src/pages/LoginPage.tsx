@@ -4,6 +4,7 @@ import {
 } from 'react'
 
 import axios from 'axios'
+
 import {
   Navigate,
   useNavigate,
@@ -11,7 +12,6 @@ import {
 
 import {
   clearSession,
-  getCurrentUser,
   hasValidSession,
   login,
   saveSession,
@@ -24,18 +24,31 @@ interface ApiError {
 
 
 function LoginPage() {
-  const navigate = useNavigate()
+  const navigate =
+    useNavigate()
 
-  const [employeeNumber, setEmployeeNumber] =
+  const [
+    employeeNumber,
+    setEmployeeNumber,
+  ] =
     useState('')
 
-  const [password, setPassword] =
+  const [
+    password,
+    setPassword,
+  ] =
     useState('')
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState('')
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(false)
 
 
@@ -49,65 +62,82 @@ function LoginPage() {
   }
 
 
-  const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault()
+  const handleSubmit =
+    async (
+      event:
+        FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault()
 
-    setError('')
-
-    if (
-      !employeeNumber.trim() ||
-      !password
-    ) {
-      setError(
-        'Ingrese el número de empleado y la contraseña.',
-      )
-      return
-    }
-
-    try {
-      setIsLoading(true)
-
-      const tokenData =
-        await login({
-          employee_number:
-            employeeNumber.trim(),
-          password,
-        })
-
-      saveSession(tokenData)
-
-      await getCurrentUser()
-
-      navigate(
-        '/projects',
-        {
-          replace: true,
-        },
-      )
-    } catch (requestError) {
-      clearSession()
+      setError('')
 
       if (
-        axios.isAxiosError<ApiError>(
-          requestError,
-        )
+        !employeeNumber.trim() ||
+        !password
       ) {
         setError(
-          requestError.response
-            ?.data?.detail ??
-            'No fue posible iniciar sesión.',
+          'Ingrese el número de empleado y la contraseña.',
         )
-      } else {
-        setError(
-          'Ocurrió un error inesperado.',
-        )
+
+        return
       }
-    } finally {
-      setIsLoading(false)
+
+      try {
+        setIsLoading(true)
+
+        const tokenData =
+          await login({
+            employee_number:
+              employeeNumber.trim(),
+
+            password,
+          })
+
+        saveSession(
+          tokenData,
+        )
+
+        /*
+         * ProjectsPage ya consulta
+         * /auth/me al cargar.
+         *
+         * Evitamos hacer aquí una
+         * consulta duplicada.
+         */
+        navigate(
+          '/projects',
+          {
+            replace: true,
+          },
+        )
+      } catch (
+        requestError
+      ) {
+        clearSession()
+
+        if (
+          axios.isAxiosError<
+            ApiError
+          >(
+            requestError,
+          )
+        ) {
+          setError(
+            requestError
+              .response
+              ?.data
+              ?.detail ??
+              'No fue posible iniciar sesión.',
+          )
+        } else {
+          setError(
+            'Ocurrió un error inesperado.',
+          )
+        }
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }
 
 
   return (
@@ -133,7 +163,9 @@ function LoginPage() {
 
         <form
           className="login-form"
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
         >
           <div>
             <h2>
@@ -151,14 +183,20 @@ function LoginPage() {
 
             <input
               type="text"
-              value={employeeNumber}
-              onChange={(event) =>
+              value={
+                employeeNumber
+              }
+              onChange={(
+                event,
+              ) =>
                 setEmployeeNumber(
                   event.target.value,
                 )
               }
               autoComplete="username"
-              disabled={isLoading}
+              disabled={
+                isLoading
+              }
             />
           </label>
 
@@ -167,14 +205,20 @@ function LoginPage() {
 
             <input
               type="password"
-              value={password}
-              onChange={(event) =>
+              value={
+                password
+              }
+              onChange={(
+                event,
+              ) =>
                 setPassword(
                   event.target.value,
                 )
               }
               autoComplete="current-password"
-              disabled={isLoading}
+              disabled={
+                isLoading
+              }
             />
           </label>
 
@@ -189,7 +233,9 @@ function LoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={
+              isLoading
+            }
           >
             {isLoading
               ? 'Ingresando...'

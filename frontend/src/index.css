@@ -606,3 +606,17 @@ button:disabled {
   color: #64748b;
   font-size: 0.8rem;
 }
+.project-dates {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  color: #334155;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .project-dates {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

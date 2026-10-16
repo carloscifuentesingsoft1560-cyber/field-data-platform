@@ -1,4 +1,5 @@
 import {
+  type FormEvent,
   useEffect,
   useState,
 } from 'react'
@@ -14,6 +15,10 @@ import {
 } from '../api/auth'
 
 import api from '../api/client'
+
+import {
+  syncSurvey,
+} from '../api/surveys'
 
 import type {
   FieldOption,
@@ -31,11 +36,65 @@ import type {
   FormVersion,
 } from '../types/formVersion'
 
+import type {
+  SurveyAnswerPayload,
+} from '../types/survey'
+
 
 type FormValues = Record<
   number,
   string | boolean
 >
+
+
+interface Coordinates {
+  latitude: number | null
+  longitude: number | null
+}
+
+
+function getCoordinates():
+Promise<Coordinates> {
+  return new Promise(
+    (resolve) => {
+      if (
+        !navigator.geolocation
+      ) {
+        resolve({
+          latitude: null,
+          longitude: null,
+        })
+
+        return
+      }
+
+      navigator.geolocation
+        .getCurrentPosition(
+          (position) => {
+            resolve({
+              latitude:
+                position.coords
+                  .latitude,
+              longitude:
+                position.coords
+                  .longitude,
+            })
+          },
+          () => {
+            resolve({
+              latitude: null,
+              longitude: null,
+            })
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 8000,
+            maximumAge: 60000,
+          },
+        )
+    },
+  )
+}
 
 
 function DynamicFormPage() {
@@ -70,7 +129,13 @@ function DynamicFormPage() {
   const [isLoading, setIsLoading] =
     useState(true)
 
+  const [isSaving, setIsSaving] =
+    useState(false)
+
   const [error, setError] =
+    useState('')
+
+  const [success, setSuccess] =
     useState('')
 
 
@@ -140,6 +205,27 @@ function DynamicFormPage() {
 
         setFields(
           loadedFields,
+        )
+
+        const initialValues:
+        FormValues = {}
+
+        for (
+          const field
+          of loadedFields
+        ) {
+          if (
+            field.field_type ===
+            'boolean'
+          ) {
+            initialValues[
+              field.id
+            ] = false
+          }
+        }
+
+        setValues(
+          initialValues,
         )
 
         const selectFields =
@@ -236,6 +322,248 @@ function DynamicFormPage() {
   }
 
 
+  const buildAnswers = ():
+  SurveyAnswerPayload[] => {
+    const answers:
+    SurveyAnswerPayload[] = []
+
+    for (
+      const field of fields
+    ) {
+      const value =
+        values[field.id]
+
+      const isEmpty =
+        value === undefined ||
+        value === null ||
+        value === ''
+
+      if (
+        field.is_required &&
+        isEmpty &&
+        field.field_type !==
+          'boolean'
+      ) {
+        throw new Error(
+          `El campo "${field.name}" es obligatorio.`,
+        )
+      }
+
+      if (
+        !field.is_required &&
+        isEmpty &&
+        field.field_type !==
+          'boolean'
+      ) {
+        continue
+      }
+
+      if (
+        field.field_type ===
+        'text' ||
+        field.field_type ===
+        'textarea'
+      ) {
+        answers.push({
+          form_field_id:
+            field.id,
+          value_text:
+            String(value),
+        })
+      }
+
+      if (
+        field.field_type ===
+        'number'
+      ) {
+        const numericValue =
+          Number(value)
+
+        if (
+          Number.isNaN(
+            numericValue,
+          )
+        ) {
+          throw new Error(
+            `El campo "${field.name}" debe contener un número válido.`,
+          )
+        }
+
+        answers.push({
+          form_field_id:
+            field.id,
+          value_number:
+            numericValue,
+        })
+      }
+
+      if (
+        field.field_type ===
+        'date'
+      ) {
+        answers.push({
+          form_field_id:
+            field.id,
+          value_date:
+            String(value),
+        })
+      }
+
+      if (
+        field.field_type ===
+        'boolean'
+      ) {
+        answers.push({
+          form_field_id:
+            field.id,
+          value_boolean:
+            Boolean(value),
+        })
+      }
+
+      if (
+        field.field_type ===
+        'select'
+      ) {
+        const optionId =
+          Number(value)
+
+        if (
+          Number.isNaN(
+            optionId,
+          )
+        ) {
+          throw new Error(
+            `Seleccione una opción válida en "${field.name}".`,
+          )
+        }
+
+        answers.push({
+          form_field_id:
+            field.id,
+          field_option_id:
+            optionId,
+        })
+      }
+    }
+
+    return answers
+  }
+
+
+  const handleSubmit = async (
+    event:
+    FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault()
+
+    setError('')
+    setSuccess('')
+
+    if (!version) {
+      setError(
+        'No se encontró una versión publicada.',
+      )
+
+      return
+    }
+
+    try {
+      setIsSaving(true)
+
+      const answers =
+        buildAnswers()
+
+      const coordinates =
+        await getCoordinates()
+
+      const payload = {
+        uuid:
+          crypto.randomUUID(),
+
+        form_version_id:
+          version.id,
+
+        latitude:
+          coordinates.latitude,
+
+        longitude:
+          coordinates.longitude,
+
+        captured_at:
+          new Date().toISOString(),
+
+        answers,
+      }
+
+      const result =
+        await syncSurvey(
+          payload,
+        )
+
+      setSuccess(
+        `Encuesta guardada correctamente. ID: ${result.survey.id}`,
+      )
+    } catch (requestError) {
+      if (
+        requestError
+        instanceof Error &&
+        !axios.isAxiosError(
+          requestError,
+        )
+      ) {
+        setError(
+          requestError.message,
+        )
+
+        return
+      }
+
+      if (
+        axios.isAxiosError(
+          requestError,
+        )
+      ) {
+        const status =
+          requestError.response
+            ?.status
+
+        if (status === 401) {
+          clearSession()
+
+          navigate(
+            '/login',
+            {
+              replace: true,
+            },
+          )
+
+          return
+        }
+
+        const detail =
+          requestError.response
+            ?.data?.detail
+
+        setError(
+          typeof detail ===
+            'string'
+            ? detail
+            : 'No fue posible guardar la encuesta.',
+        )
+
+        return
+      }
+
+      setError(
+        'Ocurrió un error inesperado.',
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+
   if (isLoading) {
     return (
       <main className="center-page">
@@ -283,8 +611,16 @@ function DynamicFormPage() {
           </div>
         )}
 
-        {!error &&
-          form &&
+        {success && (
+          <div
+            className="alert alert-success"
+            role="status"
+          >
+            {success}
+          </div>
+        )}
+
+        {form &&
           version && (
             <>
               <div className="page-heading">
@@ -296,15 +632,18 @@ function DynamicFormPage() {
                   <p>
                     Versión
                     {' '}
-                    {version.version_number}
+                    {
+                      version
+                        .version_number
+                    }
                   </p>
                 </div>
               </div>
 
               <form
                 className="dynamic-form"
-                onSubmit={(event) =>
-                  event.preventDefault()
+                onSubmit={
+                  handleSubmit
                 }
               >
                 {fields.map(
@@ -441,7 +780,9 @@ function DynamicFormPage() {
 
                       {field.field_type ===
                         'boolean' && (
-                        <label className="checkbox-field">
+                        <label
+                          className="checkbox-field"
+                        >
                           <input
                             id={
                               `field-${field.id}`
@@ -510,7 +851,7 @@ function DynamicFormPage() {
                                   option.id
                                 }
                                 value={
-                                  option.value
+                                  option.id
                                 }
                               >
                                 {
@@ -525,7 +866,8 @@ function DynamicFormPage() {
                   ),
                 )}
 
-                {fields.length === 0 && (
+                {fields.length ===
+                  0 && (
                   <div className="empty-state">
                     <h2>
                       Sin campos
@@ -539,12 +881,18 @@ function DynamicFormPage() {
                   </div>
                 )}
 
-                {fields.length > 0 && (
+                {fields.length >
+                  0 && (
                   <button
                     className="primary-action"
                     type="submit"
+                    disabled={
+                      isSaving
+                    }
                   >
-                    Guardar encuesta
+                    {isSaving
+                      ? 'Guardando...'
+                      : 'Guardar encuesta'}
                   </button>
                 )}
               </form>

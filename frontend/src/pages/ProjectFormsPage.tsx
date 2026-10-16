@@ -26,10 +26,14 @@ import type {
 
 function ProjectFormsPage() {
   const navigate = useNavigate()
-  const { projectId } = useParams()
+
+  const { projectId } =
+    useParams()
 
   const [project, setProject] =
-    useState<Project | null>(null)
+    useState<Project | null>(
+      null,
+    )
 
   const [forms, setForms] =
     useState<Form[]>([])
@@ -57,6 +61,7 @@ function ProjectFormsPage() {
         )
 
         setIsLoading(false)
+
         return
       }
 
@@ -162,7 +167,9 @@ function ProjectFormsPage() {
           className="secondary-button"
           type="button"
           onClick={() =>
-            navigate('/projects')
+            navigate(
+              '/projects',
+            )
           }
         >
           Volver a proyectos
@@ -243,6 +250,11 @@ function ProjectFormsPage() {
                         type="button"
                         disabled={
                           !form.is_active
+                        }
+                        onClick={() =>
+                          navigate(
+                            `/projects/${project.id}/forms/${form.id}`,
+                          )
                         }
                       >
                         Abrir formulario

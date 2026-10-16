@@ -12,9 +12,10 @@ import {
   hasValidSession,
 } from '../api/auth'
 
+import DynamicFormPage from '../pages/DynamicFormPage'
 import LoginPage from '../pages/LoginPage'
-import ProjectsPage from '../pages/ProjectsPage'
 import ProjectFormsPage from '../pages/ProjectFormsPage'
+import ProjectsPage from '../pages/ProjectsPage'
 
 
 interface ProtectedRouteProps {
@@ -72,6 +73,15 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ProjectFormsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/projects/:projectId/forms/:formId"
+        element={
+          <ProtectedRoute>
+            <DynamicFormPage />
           </ProtectedRoute>
         }
       />

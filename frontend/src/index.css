@@ -492,3 +492,117 @@ button:disabled {
   background: #1d4ed8;
   border-color: #1d4ed8;
 }
+/* ============================================================
+   SURVEY CORRECTIONS
+   ============================================================ */
+
+.correction-panel {
+  margin-top: 4px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.correction-panel h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.correction-panel .form-field input,
+.correction-panel .form-field textarea,
+.correction-panel .form-field select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+}
+
+.correction-panel .form-field textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.correction-panel .form-field input:focus,
+.correction-panel .form-field textarea:focus,
+.correction-panel .form-field select:focus {
+  border-color: #2563eb;
+  outline: none;
+  box-shadow:
+    0 0 0 3px
+    rgba(37, 99, 235, 0.12);
+}
+
+.correction-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.outline-action {
+  padding: 13px 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 700;
+}
+
+.outline-action:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+/* ============================================================
+   CORRECTION HISTORY
+   ============================================================ */
+
+.correction-history {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.correction-history h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.correction-history-item {
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.correction-history-item p {
+  margin: 8px 0 0;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.correction-history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.correction-history-heading strong {
+  color: #0f172a;
+}
+
+.correction-history-heading span {
+  color: #64748b;
+  font-size: 0.8rem;
+}

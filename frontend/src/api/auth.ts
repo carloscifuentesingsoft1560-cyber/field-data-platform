@@ -7,7 +7,9 @@ import type {
 } from '../types/auth'
 
 
-const ACCESS_TOKEN_KEY = 'access_token'
+const ACCESS_TOKEN_KEY =
+  'access_token'
+
 const TOKEN_EXPIRES_AT_KEY =
   'token_expires_at'
 
@@ -66,6 +68,65 @@ export function clearSession(): void {
 }
 
 
+export function getSessionUserId():
+number | null {
+  const token =
+    localStorage.getItem(
+      ACCESS_TOKEN_KEY,
+    )
+
+  if (!token) {
+    return null
+  }
+
+  try {
+    const parts =
+      token.split('.')
+
+    if (parts.length !== 3) {
+      return null
+    }
+
+    const normalized =
+      parts[1]
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+
+    const padded =
+      normalized.padEnd(
+        Math.ceil(
+          normalized.length / 4,
+        ) * 4,
+        '=',
+      )
+
+    const payload =
+      JSON.parse(
+        atob(padded),
+      ) as {
+        sub?: string
+      }
+
+    if (!payload.sub) {
+      return null
+    }
+
+    const userId =
+      Number(payload.sub)
+
+    if (
+      Number.isNaN(userId)
+    ) {
+      return null
+    }
+
+    return userId
+  } catch {
+    return null
+  }
+}
+
+
 export function hasValidSession():
 boolean {
   const token =
@@ -78,19 +139,29 @@ boolean {
       TOKEN_EXPIRES_AT_KEY,
     )
 
-  if (!token || !expiresAtValue) {
+  if (
+    !token ||
+    !expiresAtValue
+  ) {
     clearSession()
+
     return false
   }
 
   const expiresAt =
-    Number(expiresAtValue)
+    Number(
+      expiresAtValue,
+    )
 
   if (
-    Number.isNaN(expiresAt) ||
-    Date.now() >= expiresAt
+    Number.isNaN(
+      expiresAt,
+    ) ||
+    Date.now() >=
+      expiresAt
   ) {
     clearSession()
+
     return false
   }
 

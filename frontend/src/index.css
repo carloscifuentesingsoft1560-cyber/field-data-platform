@@ -472,3 +472,10 @@ button:disabled {
   color: #166534;
   margin-bottom: 20px;
 }
+
+.alert-offline {
+  margin-bottom: 20px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+}

@@ -4,16 +4,24 @@ import {
 } from 'react'
 
 import axios from 'axios'
+
 import {
   useNavigate,
   useParams,
 } from 'react-router-dom'
 
+import {
+  clearSession,
+  getSessionUserId,
+} from '../api/auth'
+
 import api from '../api/client'
 
 import {
-  clearSession,
-} from '../api/auth'
+  cacheForms,
+  getCachedFormsByProject,
+  getCachedProject,
+} from '../services/offlineCache'
 
 import type {
   Form,
@@ -25,12 +33,16 @@ import type {
 
 
 function ProjectFormsPage() {
-  const navigate = useNavigate()
+  const navigate =
+    useNavigate()
 
   const { projectId } =
     useParams()
 
-  const [project, setProject] =
+  const [
+    project,
+    setProject,
+  ] =
     useState<Project | null>(
       null,
     )
@@ -38,99 +50,208 @@ function ProjectFormsPage() {
   const [forms, setForms] =
     useState<Form[]>([])
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true)
 
   const [error, setError] =
     useState('')
 
+  const [
+    isOfflineData,
+    setIsOfflineData,
+  ] = useState(false)
+
 
   useEffect(() => {
-    const loadData = async () => {
-      const numericProjectId =
-        Number(projectId)
+    const loadData =
+      async () => {
+        const numericProjectId =
+          Number(
+            projectId,
+          )
 
-      if (
-        !projectId ||
-        Number.isNaN(
-          numericProjectId,
-        )
-      ) {
-        setError(
-          'El proyecto seleccionado no es válido.',
-        )
-
-        setIsLoading(false)
-
-        return
-      }
-
-      try {
-        const [
-          projectResponse,
-          formsResponse,
-        ] = await Promise.all([
-          api.get<Project>(
-            `/projects/${numericProjectId}`,
-          ),
-          api.get<Form[]>(
-            '/forms/',
-          ),
-        ])
-
-        setProject(
-          projectResponse.data,
-        )
-
-        setForms(
-          formsResponse.data.filter(
-            (form) =>
-              form.project_id ===
-              numericProjectId,
-          ),
-        )
-      } catch (requestError) {
         if (
-          axios.isAxiosError(
-            requestError,
+          !projectId ||
+          Number.isNaN(
+            numericProjectId,
           )
         ) {
-          const status =
-            requestError.response
-              ?.status
+          setError(
+            'El proyecto seleccionado no es válido.',
+          )
 
-          if (status === 401) {
-            clearSession()
+          setIsLoading(
+            false,
+          )
 
-            navigate(
-              '/login',
-              {
-                replace: true,
-              },
-            )
-
-            return
-          }
-
-          if (
-            status === 403 ||
-            status === 404
-          ) {
-            setError(
-              'No tienes acceso a este proyecto o el proyecto no existe.',
-            )
-
-            return
-          }
+          return
         }
 
-        setError(
-          'No fue posible cargar los formularios.',
-        )
-      } finally {
-        setIsLoading(false)
+        const ownerUserId =
+          getSessionUserId()
+
+        if (!ownerUserId) {
+          clearSession()
+
+          navigate(
+            '/login',
+            {
+              replace: true,
+            },
+          )
+
+          return
+        }
+
+        try {
+          const [
+            projectResponse,
+            formsResponse,
+          ] =
+            await Promise.all([
+              api.get<Project>(
+                `/projects/${numericProjectId}`,
+              ),
+
+              api.get<Form[]>(
+                '/forms/',
+              ),
+            ])
+
+          const projectForms =
+            formsResponse
+              .data
+              .filter(
+                (form) =>
+                  form.project_id ===
+                  numericProjectId,
+              )
+
+          setProject(
+            projectResponse.data,
+          )
+
+          setForms(
+            projectForms,
+          )
+
+          setIsOfflineData(
+            false,
+          )
+
+          /*
+           * Guardamos todos los
+           * formularios accesibles.
+           */
+          try {
+            await cacheForms(
+              ownerUserId,
+              formsResponse.data,
+            )
+          } catch {
+            // La API ya cargó.
+          }
+        } catch (
+          requestError
+        ) {
+          if (
+            axios.isAxiosError(
+              requestError,
+            )
+          ) {
+            const status =
+              requestError
+                .response
+                ?.status
+
+            if (
+              status === 401
+            ) {
+              clearSession()
+
+              navigate(
+                '/login',
+                {
+                  replace: true,
+                },
+              )
+
+              return
+            }
+
+            /*
+             * Si el servidor sí
+             * respondió 403/404,
+             * no usamos caché para
+             * saltarnos seguridad.
+             */
+            if (
+              status === 403 ||
+              status === 404
+            ) {
+              setError(
+                'No tienes acceso a este proyecto o el proyecto no existe.',
+              )
+
+              return
+            }
+          }
+
+          /*
+           * Error de red:
+           * buscamos el proyecto
+           * y formularios locales.
+           */
+          try {
+            const [
+              cachedProject,
+              cachedForms,
+            ] =
+              await Promise.all([
+                getCachedProject(
+                  ownerUserId,
+                  numericProjectId,
+                ),
+
+                getCachedFormsByProject(
+                  ownerUserId,
+                  numericProjectId,
+                ),
+              ])
+
+            if (!cachedProject) {
+              setError(
+                'No fue posible cargar este proyecto y no está disponible sin conexión.',
+              )
+
+              return
+            }
+
+            setProject(
+              cachedProject,
+            )
+
+            setForms(
+              cachedForms,
+            )
+
+            setIsOfflineData(
+              true,
+            )
+          } catch {
+            setError(
+              'No fue posible cargar los formularios.',
+            )
+          }
+        } finally {
+          setIsLoading(
+            false,
+          )
+        }
       }
-    }
 
     void loadData()
   }, [
@@ -159,7 +280,8 @@ function ProjectFormsPage() {
           </span>
 
           <p>
-            Formularios del proyecto
+            Formularios del
+            proyecto
           </p>
         </div>
 
@@ -177,6 +299,18 @@ function ProjectFormsPage() {
       </header>
 
       <section className="content-container">
+        {isOfflineData && (
+          <div
+            className="alert alert-offline"
+            role="status"
+          >
+            Modo sin conexión:
+            mostrando formularios
+            guardados en este
+            dispositivo.
+          </div>
+        )}
+
         {error && (
           <div
             className="alert alert-error"
@@ -192,7 +326,10 @@ function ProjectFormsPage() {
               <div className="page-heading">
                 <div>
                   <h1>
-                    {project.name}
+                    {
+                      project
+                        .name
+                    }
                   </h1>
 
                   <p>
@@ -203,15 +340,17 @@ function ProjectFormsPage() {
                 </div>
               </div>
 
-              {forms.length === 0 && (
+              {forms.length ===
+                0 && (
                 <div className="empty-state">
                   <h2>
                     Sin formularios
                   </h2>
 
                   <p>
-                    Este proyecto no tiene
-                    formularios disponibles.
+                    Este proyecto no
+                    tiene formularios
+                    disponibles.
                   </p>
                 </div>
               )}
@@ -221,11 +360,16 @@ function ProjectFormsPage() {
                   (form) => (
                     <article
                       className="project-card"
-                      key={form.id}
+                      key={
+                        form.id
+                      }
                     >
                       <div className="card-heading">
                         <h2>
-                          {form.name}
+                          {
+                            form
+                              .name
+                          }
                         </h2>
 
                         <span
@@ -242,7 +386,8 @@ function ProjectFormsPage() {
                       </div>
 
                       <p>
-                        {form.description ??
+                        {form
+                          .description ??
                           'Sin descripción.'}
                       </p>
 

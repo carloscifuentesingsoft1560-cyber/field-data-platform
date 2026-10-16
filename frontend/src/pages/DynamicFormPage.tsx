@@ -13,9 +13,20 @@ import {
 
 import {
   clearSession,
+  getSessionUserId,
 } from '../api/auth'
 
 import api from '../api/client'
+
+import {
+  cacheFieldOptions,
+  cacheFormFields,
+  cacheFormVersions,
+  getCachedFieldOptions,
+  getCachedForm,
+  getCachedFormFields,
+  getCachedPublishedVersion,
+} from '../services/offlineCache'
 
 import {
   queueSurvey,
@@ -127,195 +138,413 @@ function buildInitialValues(
 
 
 function DynamicFormPage() {
-  const navigate = useNavigate()
+  const navigate =
+    useNavigate()
 
   const {
     projectId,
     formId,
   } = useParams()
 
-  const [form, setForm] =
+  const [
+    form,
+    setForm,
+  ] =
     useState<Form | null>(
       null,
     )
 
-  const [version, setVersion] =
+  const [
+    version,
+    setVersion,
+  ] =
     useState<FormVersion | null>(
       null,
     )
 
-  const [fields, setFields] =
+  const [
+    fields,
+    setFields,
+  ] =
     useState<FormField[]>([])
 
-  const [options, setOptions] =
+  const [
+    options,
+    setOptions,
+  ] =
     useState<
-      Record<number, FieldOption[]>
+      Record<
+        number,
+        FieldOption[]
+      >
     >({})
 
-  const [values, setValues] =
+  const [
+    values,
+    setValues,
+  ] =
     useState<FormValues>({})
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true)
 
-  const [isSaving, setIsSaving] =
+  const [
+    isSaving,
+    setIsSaving,
+  ] =
     useState(false)
 
-  const [error, setError] =
+  const [
+    isOfflineData,
+    setIsOfflineData,
+  ] =
+    useState(false)
+
+  const [
+    error,
+    setError,
+  ] =
     useState('')
 
-  const [success, setSuccess] =
+  const [
+    success,
+    setSuccess,
+  ] =
     useState('')
 
 
   useEffect(() => {
-    const loadForm = async () => {
-      const numericFormId =
-        Number(formId)
+    const loadForm =
+      async () => {
+        const numericFormId =
+          Number(formId)
 
-      if (
-        !formId ||
-        Number.isNaN(
-          numericFormId,
-        )
-      ) {
-        setError(
-          'El formulario seleccionado no es válido.',
-        )
-
-        setIsLoading(false)
-
-        return
-      }
-
-      try {
-        const [
-          formResponse,
-          versionsResponse,
-        ] = await Promise.all([
-          api.get<Form>(
-            `/forms/${numericFormId}`,
-          ),
-
-          api.get<FormVersion[]>(
-            `/form-versions/form/${numericFormId}`,
-          ),
-        ])
-
-        setForm(
-          formResponse.data,
-        )
-
-        const publishedVersion =
-          versionsResponse.data.find(
-            (item) =>
-              item.status ===
-              'published',
+        if (
+          !formId ||
+          Number.isNaN(
+            numericFormId,
+          )
+        ) {
+          setError(
+            'El formulario seleccionado no es válido.',
           )
 
-        if (!publishedVersion) {
-          setError(
-            'Este formulario no tiene una versión publicada.',
+          setIsLoading(
+            false,
           )
 
           return
         }
 
-        setVersion(
-          publishedVersion,
-        )
+        const ownerUserId =
+          getSessionUserId()
 
-        const fieldsResponse =
-          await api.get<FormField[]>(
-            `/form-fields/version/${publishedVersion.id}`,
+        if (!ownerUserId) {
+          clearSession()
+
+          navigate(
+            '/login',
+            {
+              replace: true,
+            },
           )
 
-        const loadedFields =
-          fieldsResponse.data
+          return
+        }
 
-        setFields(
-          loadedFields,
-        )
+        try {
+          /*
+           * Primero intentamos cargar
+           * toda la definición desde
+           * el servidor.
+           */
+          const [
+            formResponse,
+            versionsResponse,
+          ] =
+            await Promise.all([
+              api.get<Form>(
+                `/forms/${numericFormId}`,
+              ),
 
-        setValues(
-          buildInitialValues(
+              api.get<FormVersion[]>(
+                `/form-versions/form/${numericFormId}`,
+              ),
+            ])
+
+          const publishedVersion =
+            versionsResponse
+              .data
+              .find(
+                (item) =>
+                  item.status ===
+                  'published',
+              )
+
+          if (!publishedVersion) {
+            setError(
+              'Este formulario no tiene una versión publicada.',
+            )
+
+            return
+          }
+
+          const fieldsResponse =
+            await api.get<
+              FormField[]
+            >(
+              `/form-fields/version/${publishedVersion.id}`,
+            )
+
+          const loadedFields =
+            fieldsResponse.data
+
+          const selectFields =
+            loadedFields.filter(
+              (field) =>
+                field.field_type ===
+                'select',
+            )
+
+          const optionEntries =
+            await Promise.all(
+              selectFields.map(
+                async (field) => {
+                  const response =
+                    await api.get<
+                      FieldOption[]
+                    >(
+                      `/field-options/by-field/${field.id}`,
+                    )
+
+                  return [
+                    field.id,
+                    response.data,
+                  ] as const
+                },
+              ),
+            )
+
+          const loadedOptions =
+            Object.fromEntries(
+              optionEntries,
+            )
+
+          setForm(
+            formResponse.data,
+          )
+
+          setVersion(
+            publishedVersion,
+          )
+
+          setFields(
             loadedFields,
-          ),
-        )
-
-        const selectFields =
-          loadedFields.filter(
-            (field) =>
-              field.field_type ===
-              'select',
           )
 
-        const optionEntries =
-          await Promise.all(
-            selectFields.map(
-              async (field) => {
-                const response =
-                  await api.get<
-                    FieldOption[]
-                  >(
-                    `/field-options/by-field/${field.id}`,
-                  )
+          setOptions(
+            loadedOptions,
+          )
 
-                return [
-                  field.id,
-                  response.data,
-                ] as const
-              },
+          setValues(
+            buildInitialValues(
+              loadedFields,
             ),
           )
 
-        setOptions(
-          Object.fromEntries(
-            optionEntries,
-          ),
-        )
-      } catch (requestError) {
-        if (
-          axios.isAxiosError(
-            requestError,
+          setIsOfflineData(
+            false,
           )
+
+          /*
+           * Guardamos la definición
+           * del formulario para uso
+           * posterior sin conexión.
+           */
+          try {
+            await cacheFormVersions(
+              ownerUserId,
+              numericFormId,
+              versionsResponse.data,
+            )
+
+            await cacheFormFields(
+              ownerUserId,
+              publishedVersion.id,
+              loadedFields,
+            )
+
+            await Promise.all(
+              selectFields.map(
+                (field) =>
+                  cacheFieldOptions(
+                    ownerUserId,
+                    field.id,
+                    loadedOptions[
+                      field.id
+                    ] ?? [],
+                  ),
+              ),
+            )
+          } catch {
+            /*
+             * Un problema de IndexedDB
+             * no debe impedir el uso
+             * normal cuando la API sí
+             * está disponible.
+             */
+          }
+        } catch (
+          requestError
         ) {
-          const status =
-            requestError.response
-              ?.status
-
-          if (status === 401) {
-            clearSession()
-
-            navigate(
-              '/login',
-              {
-                replace: true,
-              },
-            )
-
-            return
-          }
-
           if (
-            status === 403 ||
-            status === 404
+            axios.isAxiosError(
+              requestError,
+            )
           ) {
-            setError(
-              'No tienes acceso al formulario solicitado.',
+            const status =
+              requestError
+                .response
+                ?.status
+
+            if (status === 401) {
+              clearSession()
+
+              navigate(
+                '/login',
+                {
+                  replace: true,
+                },
+              )
+
+              return
+            }
+
+            if (
+              status === 403 ||
+              status === 404
+            ) {
+              setError(
+                'No tienes acceso al formulario solicitado.',
+              )
+
+              return
+            }
+          }
+
+          /*
+           * Si FastAPI no está
+           * disponible, cargamos
+           * toda la definición desde
+           * IndexedDB.
+           */
+          try {
+            const cachedForm =
+              await getCachedForm(
+                ownerUserId,
+                numericFormId,
+              )
+
+            if (!cachedForm) {
+              setError(
+                'El formulario no está disponible sin conexión en este dispositivo.',
+              )
+
+              return
+            }
+
+            const cachedVersion =
+              await getCachedPublishedVersion(
+                ownerUserId,
+                numericFormId,
+              )
+
+            if (!cachedVersion) {
+              setError(
+                'No hay una versión publicada guardada para utilizar sin conexión.',
+              )
+
+              return
+            }
+
+            const cachedFields =
+              await getCachedFormFields(
+                ownerUserId,
+                cachedVersion.id,
+              )
+
+            if (
+              cachedFields.length ===
+              0
+            ) {
+              setError(
+                'No hay campos guardados para este formulario sin conexión.',
+              )
+
+              return
+            }
+
+            const selectFields =
+              cachedFields.filter(
+                (field) =>
+                  field.field_type ===
+                  'select',
+              )
+
+            const optionEntries =
+              await Promise.all(
+                selectFields.map(
+                  async (field) => [
+                    field.id,
+                    await getCachedFieldOptions(
+                      ownerUserId,
+                      field.id,
+                    ),
+                  ] as const,
+                ),
+              )
+
+            setForm(
+              cachedForm,
             )
 
-            return
-          }
-        }
+            setVersion(
+              cachedVersion,
+            )
 
-        setError(
-          'No fue posible cargar el formulario.',
-        )
-      } finally {
-        setIsLoading(false)
+            setFields(
+              cachedFields,
+            )
+
+            setOptions(
+              Object.fromEntries(
+                optionEntries,
+              ),
+            )
+
+            setValues(
+              buildInitialValues(
+                cachedFields,
+              ),
+            )
+
+            setIsOfflineData(
+              true,
+            )
+          } catch {
+            setError(
+              'No fue posible cargar el formulario.',
+            )
+          }
+        } finally {
+          setIsLoading(
+            false,
+          )
+        }
       }
-    }
 
     void loadForm()
   }, [
@@ -326,10 +555,13 @@ function DynamicFormPage() {
 
   const updateValue = (
     fieldId: number,
-    value: string | boolean,
+    value:
+      string | boolean,
   ) => {
     setValues(
-      (currentValues) => ({
+      (
+        currentValues,
+      ) => ({
         ...currentValues,
         [fieldId]: value,
       }),
@@ -337,13 +569,14 @@ function DynamicFormPage() {
   }
 
 
-  const resetFormValues = () => {
-    setValues(
-      buildInitialValues(
-        fields,
-      ),
-    )
-  }
+  const resetFormValues =
+    () => {
+      setValues(
+        buildInitialValues(
+          fields,
+        ),
+      )
+    }
 
 
   const buildAnswers = ():
@@ -480,101 +713,67 @@ function DynamicFormPage() {
   }
 
 
-  const handleSubmit = async (
-    event:
-    FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault()
+  const handleSubmit =
+    async (
+      event:
+      FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault()
 
-    setError('')
-    setSuccess('')
+      setError('')
+      setSuccess('')
 
-    if (!version) {
-      setError(
-        'No se encontró una versión publicada.',
-      )
-
-      return
-    }
-
-    try {
-      setIsSaving(true)
-
-      const answers =
-        buildAnswers()
-
-      const coordinates =
-        await getCoordinates()
-
-      const payload:
-      SurveySyncPayload = {
-        uuid:
-          crypto.randomUUID(),
-
-        form_version_id:
-          version.id,
-
-        latitude:
-          coordinates.latitude,
-
-        longitude:
-          coordinates.longitude,
-
-        captured_at:
-          new Date()
-            .toISOString(),
-
-        answers,
-      }
-
-      /*
-       * Primero se almacena localmente.
-       * Así no se pierde la encuesta si
-       * la conexión falla durante el envío.
-       */
-      await queueSurvey(
-        payload,
-      )
-
-      /*
-       * Si el navegador ya sabe que está
-       * sin conexión, dejamos la encuesta
-       * pendiente en IndexedDB.
-       */
-      if (!navigator.onLine) {
-        setSuccess(
-          'Encuesta guardada en el dispositivo. Se sincronizará automáticamente cuando vuelva la conexión.',
+      if (!version) {
+        setError(
+          'No se encontró una versión publicada.',
         )
-
-        resetFormValues()
 
         return
       }
 
       try {
-        const result =
-          await syncQueuedSurvey(
-            payload,
-          )
+        setIsSaving(true)
 
-        setSuccess(
-          `Encuesta guardada y sincronizada correctamente. Identificación: ${result.survey.id}`,
+        const answers =
+          buildAnswers()
+
+        const coordinates =
+          await getCoordinates()
+
+        const payload:
+        SurveySyncPayload = {
+          uuid:
+            crypto.randomUUID(),
+
+          form_version_id:
+            version.id,
+
+          latitude:
+            coordinates.latitude,
+
+          longitude:
+            coordinates.longitude,
+
+          captured_at:
+            new Date()
+              .toISOString(),
+
+          answers,
+        }
+
+        /*
+         * La encuesta siempre se
+         * guarda primero localmente.
+         */
+        await queueSurvey(
+          payload,
         )
 
-        resetFormValues()
-      } catch (syncError) {
-        /*
-         * No hubo respuesta del servidor:
-         * conservamos la encuesta localmente.
-         */
         if (
-          axios.isAxiosError(
-            syncError,
-          ) &&
-          !syncError.response
+          !navigator.onLine
         ) {
           setSuccess(
-            'Encuesta guardada en el dispositivo. No fue posible contactar el servidor y queda pendiente de sincronización.',
+            'Encuesta guardada en el dispositivo. Se sincronizará automáticamente cuando vuelva la conexión.',
           )
 
           resetFormValues()
@@ -582,69 +781,98 @@ function DynamicFormPage() {
           return
         }
 
-        /*
-         * Sesión vencida. La encuesta sigue
-         * en IndexedDB asociada al usuario.
-         */
-        if (
-          axios.isAxiosError(
-            syncError,
-          ) &&
-          syncError.response
-            ?.status === 401
-        ) {
-          clearSession()
+        try {
+          const result =
+            await syncQueuedSurvey(
+              payload,
+            )
 
-          navigate(
-            '/login',
-            {
-              replace: true,
-            },
+          setSuccess(
+            `Encuesta guardada y sincronizada correctamente. Identificación: ${result.survey.id}`,
           )
 
-          return
-        }
-
-        if (
-          axios.isAxiosError(
-            syncError,
-          )
+          resetFormValues()
+        } catch (
+          syncError
         ) {
-          const detail =
+          if (
+            axios.isAxiosError(
+              syncError,
+            ) &&
+            !syncError.response
+          ) {
+            setSuccess(
+              'Encuesta guardada en el dispositivo. No fue posible contactar el servidor y queda pendiente de sincronización.',
+            )
+
+            resetFormValues()
+
+            return
+          }
+
+          if (
+            axios.isAxiosError(
+              syncError,
+            ) &&
             syncError.response
-              ?.data?.detail
+              ?.status === 401
+          ) {
+            clearSession()
 
+            navigate(
+              '/login',
+              {
+                replace: true,
+              },
+            )
+
+            return
+          }
+
+          if (
+            axios.isAxiosError(
+              syncError,
+            )
+          ) {
+            const detail =
+              syncError.response
+                ?.data?.detail
+
+            setError(
+              typeof detail ===
+                'string'
+                ? detail
+                : 'La encuesta quedó guardada localmente, pero el servidor rechazó la sincronización.',
+            )
+
+            return
+          }
+
+          throw syncError
+        }
+      } catch (
+        requestError
+      ) {
+        if (
+          requestError
+            instanceof Error
+        ) {
           setError(
-            typeof detail ===
-              'string'
-              ? detail
-              : 'La encuesta quedó guardada localmente, pero el servidor rechazó la sincronización.',
+            requestError.message,
           )
 
           return
         }
 
-        throw syncError
-      }
-    } catch (requestError) {
-      if (
-        requestError
-          instanceof Error
-      ) {
         setError(
-          requestError.message,
+          'Ocurrió un error inesperado al guardar la encuesta.',
         )
-
-        return
+      } finally {
+        setIsSaving(
+          false,
+        )
       }
-
-      setError(
-        'Ocurrió un error inesperado al guardar la encuesta.',
-      )
-    } finally {
-      setIsSaving(false)
     }
-  }
 
 
   if (isLoading) {
@@ -685,6 +913,17 @@ function DynamicFormPage() {
       </header>
 
       <section className="content-container">
+        {isOfflineData && (
+          <div
+            className="alert alert-offline"
+            role="status"
+          >
+            Modo sin conexión:
+            formulario cargado
+            desde este dispositivo.
+          </div>
+        )}
+
         {error && (
           <div
             className="alert alert-error"
@@ -732,14 +971,18 @@ function DynamicFormPage() {
                   (field) => (
                     <div
                       className="form-field"
-                      key={field.id}
+                      key={
+                        field.id
+                      }
                     >
                       <label
                         htmlFor={
                           `field-${field.id}`
                         }
                       >
-                        {field.name}
+                        {
+                          field.name
+                        }
 
                         {field.is_required &&
                           ' *'}
@@ -767,7 +1010,8 @@ function DynamicFormPage() {
                           ) =>
                             updateValue(
                               field.id,
-                              event.target
+                              event
+                                .target
                                 .value,
                             )
                           }
@@ -795,7 +1039,8 @@ function DynamicFormPage() {
                           ) =>
                             updateValue(
                               field.id,
-                              event.target
+                              event
+                                .target
                                 .value,
                             )
                           }
@@ -824,7 +1069,8 @@ function DynamicFormPage() {
                           ) =>
                             updateValue(
                               field.id,
-                              event.target
+                              event
+                                .target
                                 .value,
                             )
                           }
@@ -853,7 +1099,8 @@ function DynamicFormPage() {
                           ) =>
                             updateValue(
                               field.id,
-                              event.target
+                              event
+                                .target
                                 .value,
                             )
                           }
@@ -882,7 +1129,8 @@ function DynamicFormPage() {
                             ) =>
                               updateValue(
                                 field.id,
-                                event.target
+                                event
+                                  .target
                                   .checked,
                               )
                             }
@@ -913,7 +1161,8 @@ function DynamicFormPage() {
                           ) =>
                             updateValue(
                               field.id,
-                              event.target
+                              event
+                                .target
                                 .value,
                             )
                           }

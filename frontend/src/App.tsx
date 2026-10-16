@@ -1,8 +1,18 @@
-import AppRouter from './routes/AppRouter'
+import SyncManager
+  from './components/SyncManager'
+
+import AppRouter
+  from './routes/AppRouter'
 
 
 function App() {
-  return <AppRouter />
+  return (
+    <>
+      <SyncManager />
+
+      <AppRouter />
+    </>
+  )
 }
 
 

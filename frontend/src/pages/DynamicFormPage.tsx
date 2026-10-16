@@ -5,6 +5,7 @@ import {
 } from 'react'
 
 import axios from 'axios'
+
 import {
   useNavigate,
   useParams,
@@ -17,8 +18,9 @@ import {
 import api from '../api/client'
 
 import {
-  syncSurvey,
-} from '../api/surveys'
+  queueSurvey,
+  syncQueuedSurvey,
+} from '../services/surveyQueue'
 
 import type {
   FieldOption,
@@ -38,6 +40,7 @@ import type {
 
 import type {
   SurveyAnswerPayload,
+  SurveySyncPayload,
 } from '../types/survey'
 
 
@@ -75,17 +78,20 @@ Promise<Coordinates> {
               latitude:
                 position.coords
                   .latitude,
+
               longitude:
                 position.coords
                   .longitude,
             })
           },
+
           () => {
             resolve({
               latitude: null,
               longitude: null,
             })
           },
+
           {
             enableHighAccuracy: true,
             timeout: 8000,
@@ -94,6 +100,29 @@ Promise<Coordinates> {
         )
     },
   )
+}
+
+
+function buildInitialValues(
+  fields: FormField[],
+): FormValues {
+  const initialValues:
+  FormValues = {}
+
+  for (
+    const field of fields
+  ) {
+    if (
+      field.field_type ===
+      'boolean'
+    ) {
+      initialValues[
+        field.id
+      ] = false
+    }
+  }
+
+  return initialValues
 }
 
 
@@ -167,6 +196,7 @@ function DynamicFormPage() {
           api.get<Form>(
             `/forms/${numericFormId}`,
           ),
+
           api.get<FormVersion[]>(
             `/form-versions/form/${numericFormId}`,
           ),
@@ -207,25 +237,10 @@ function DynamicFormPage() {
           loadedFields,
         )
 
-        const initialValues:
-        FormValues = {}
-
-        for (
-          const field
-          of loadedFields
-        ) {
-          if (
-            field.field_type ===
-            'boolean'
-          ) {
-            initialValues[
-              field.id
-            ] = false
-          }
-        }
-
         setValues(
-          initialValues,
+          buildInitialValues(
+            loadedFields,
+          ),
         )
 
         const selectFields =
@@ -322,6 +337,15 @@ function DynamicFormPage() {
   }
 
 
+  const resetFormValues = () => {
+    setValues(
+      buildInitialValues(
+        fields,
+      ),
+    )
+  }
+
+
   const buildAnswers = ():
   SurveyAnswerPayload[] => {
     const answers:
@@ -360,13 +384,14 @@ function DynamicFormPage() {
 
       if (
         field.field_type ===
-        'text' ||
+          'text' ||
         field.field_type ===
-        'textarea'
+          'textarea'
       ) {
         answers.push({
           form_field_id:
             field.id,
+
           value_text:
             String(value),
         })
@@ -392,6 +417,7 @@ function DynamicFormPage() {
         answers.push({
           form_field_id:
             field.id,
+
           value_number:
             numericValue,
         })
@@ -404,6 +430,7 @@ function DynamicFormPage() {
         answers.push({
           form_field_id:
             field.id,
+
           value_date:
             String(value),
         })
@@ -416,6 +443,7 @@ function DynamicFormPage() {
         answers.push({
           form_field_id:
             field.id,
+
           value_boolean:
             Boolean(value),
         })
@@ -441,6 +469,7 @@ function DynamicFormPage() {
         answers.push({
           form_field_id:
             field.id,
+
           field_option_id:
             optionId,
         })
@@ -477,7 +506,8 @@ function DynamicFormPage() {
       const coordinates =
         await getCoordinates()
 
-      const payload = {
+      const payload:
+      SurveySyncPayload = {
         uuid:
           crypto.randomUUID(),
 
@@ -491,44 +521,78 @@ function DynamicFormPage() {
           coordinates.longitude,
 
         captured_at:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
 
         answers,
       }
 
-      const result =
-        await syncSurvey(
-          payload,
+      /*
+       * Primero se almacena localmente.
+       * Así no se pierde la encuesta si
+       * la conexión falla durante el envío.
+       */
+      await queueSurvey(
+        payload,
+      )
+
+      /*
+       * Si el navegador ya sabe que está
+       * sin conexión, dejamos la encuesta
+       * pendiente en IndexedDB.
+       */
+      if (!navigator.onLine) {
+        setSuccess(
+          'Encuesta guardada en el dispositivo. Se sincronizará automáticamente cuando vuelva la conexión.',
         )
 
-      setSuccess(
-        `Encuesta guardada correctamente. ID: ${result.survey.id}`,
-      )
-    } catch (requestError) {
-      if (
-        requestError
-        instanceof Error &&
-        !axios.isAxiosError(
-          requestError,
-        )
-      ) {
-        setError(
-          requestError.message,
-        )
+        resetFormValues()
 
         return
       }
 
-      if (
-        axios.isAxiosError(
-          requestError,
-        )
-      ) {
-        const status =
-          requestError.response
-            ?.status
+      try {
+        const result =
+          await syncQueuedSurvey(
+            payload,
+          )
 
-        if (status === 401) {
+        setSuccess(
+          `Encuesta guardada y sincronizada correctamente. Identificación: ${result.survey.id}`,
+        )
+
+        resetFormValues()
+      } catch (syncError) {
+        /*
+         * No hubo respuesta del servidor:
+         * conservamos la encuesta localmente.
+         */
+        if (
+          axios.isAxiosError(
+            syncError,
+          ) &&
+          !syncError.response
+        ) {
+          setSuccess(
+            'Encuesta guardada en el dispositivo. No fue posible contactar el servidor y queda pendiente de sincronización.',
+          )
+
+          resetFormValues()
+
+          return
+        }
+
+        /*
+         * Sesión vencida. La encuesta sigue
+         * en IndexedDB asociada al usuario.
+         */
+        if (
+          axios.isAxiosError(
+            syncError,
+          ) &&
+          syncError.response
+            ?.status === 401
+        ) {
           clearSession()
 
           navigate(
@@ -541,22 +605,41 @@ function DynamicFormPage() {
           return
         }
 
-        const detail =
-          requestError.response
-            ?.data?.detail
+        if (
+          axios.isAxiosError(
+            syncError,
+          )
+        ) {
+          const detail =
+            syncError.response
+              ?.data?.detail
 
+          setError(
+            typeof detail ===
+              'string'
+              ? detail
+              : 'La encuesta quedó guardada localmente, pero el servidor rechazó la sincronización.',
+          )
+
+          return
+        }
+
+        throw syncError
+      }
+    } catch (requestError) {
+      if (
+        requestError
+          instanceof Error
+      ) {
         setError(
-          typeof detail ===
-            'string'
-            ? detail
-            : 'No fue posible guardar la encuesta.',
+          requestError.message,
         )
 
         return
       }
 
       setError(
-        'Ocurrió un error inesperado.',
+        'Ocurrió un error inesperado al guardar la encuesta.',
       )
     } finally {
       setIsSaving(false)
@@ -630,8 +713,7 @@ function DynamicFormPage() {
                   </h1>
 
                   <p>
-                    Versión
-                    {' '}
+                    Versión{' '}
                     {
                       version
                         .version_number

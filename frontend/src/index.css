@@ -479,3 +479,16 @@ button:disabled {
   background: #eff6ff;
   color: #1e40af;
 }
+.page-heading .secondary-button {
+  padding: 11px 18px;
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.page-heading .secondary-button:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}

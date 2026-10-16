@@ -47,7 +47,10 @@ function ProjectFormsPage() {
       null,
     )
 
-  const [forms, setForms] =
+  const [
+    forms,
+    setForms,
+  ] =
     useState<Form[]>([])
 
   const [
@@ -56,22 +59,24 @@ function ProjectFormsPage() {
   ] =
     useState(true)
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState('')
 
   const [
     isOfflineData,
     setIsOfflineData,
-  ] = useState(false)
+  ] =
+    useState(false)
 
 
   useEffect(() => {
     const loadData =
       async () => {
         const numericProjectId =
-          Number(
-            projectId,
-          )
+          Number(projectId)
 
         if (
           !projectId ||
@@ -83,9 +88,7 @@ function ProjectFormsPage() {
             'El proyecto seleccionado no es válido.',
           )
 
-          setIsLoading(
-            false,
-          )
+          setIsLoading(false)
 
           return
         }
@@ -122,13 +125,11 @@ function ProjectFormsPage() {
             ])
 
           const projectForms =
-            formsResponse
-              .data
-              .filter(
-                (form) =>
-                  form.project_id ===
-                  numericProjectId,
-              )
+            formsResponse.data.filter(
+              (form) =>
+                form.project_id ===
+                numericProjectId,
+            )
 
           setProject(
             projectResponse.data,
@@ -142,10 +143,6 @@ function ProjectFormsPage() {
             false,
           )
 
-          /*
-           * Guardamos todos los
-           * formularios accesibles.
-           */
           try {
             await cacheForms(
               ownerUserId,
@@ -167,9 +164,7 @@ function ProjectFormsPage() {
                 .response
                 ?.status
 
-            if (
-              status === 401
-            ) {
+            if (status === 401) {
               clearSession()
 
               navigate(
@@ -182,12 +177,6 @@ function ProjectFormsPage() {
               return
             }
 
-            /*
-             * Si el servidor sí
-             * respondió 403/404,
-             * no usamos caché para
-             * saltarnos seguridad.
-             */
             if (
               status === 403 ||
               status === 404
@@ -200,11 +189,6 @@ function ProjectFormsPage() {
             }
           }
 
-          /*
-           * Error de red:
-           * buscamos el proyecto
-           * y formularios locales.
-           */
           try {
             const [
               cachedProject,
@@ -280,8 +264,7 @@ function ProjectFormsPage() {
           </span>
 
           <p>
-            Formularios del
-            proyecto
+            Formularios del proyecto
           </p>
         </div>
 
@@ -289,9 +272,7 @@ function ProjectFormsPage() {
           className="secondary-button"
           type="button"
           onClick={() =>
-            navigate(
-              '/projects',
-            )
+            navigate('/projects')
           }
         >
           Volver a proyectos
@@ -326,31 +307,38 @@ function ProjectFormsPage() {
               <div className="page-heading">
                 <div>
                   <h1>
-                    {
-                      project
-                        .name
-                    }
+                    {project.name}
                   </h1>
 
                   <p>
-                    Selecciona un
-                    formulario para
-                    continuar.
+                    Selecciona un formulario
+                    para continuar o revisa
+                    las encuestas recibidas.
                   </p>
                 </div>
+
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() =>
+                    navigate(
+                      `/projects/${project.id}/surveys`,
+                    )
+                  }
+                >
+                  Ver encuestas
+                </button>
               </div>
 
-              {forms.length ===
-                0 && (
+              {forms.length === 0 && (
                 <div className="empty-state">
                   <h2>
                     Sin formularios
                   </h2>
 
                   <p>
-                    Este proyecto no
-                    tiene formularios
-                    disponibles.
+                    Este proyecto no tiene
+                    formularios disponibles.
                   </p>
                 </div>
               )}
@@ -366,10 +354,7 @@ function ProjectFormsPage() {
                     >
                       <div className="card-heading">
                         <h2>
-                          {
-                            form
-                              .name
-                          }
+                          {form.name}
                         </h2>
 
                         <span
@@ -386,8 +371,7 @@ function ProjectFormsPage() {
                       </div>
 
                       <p>
-                        {form
-                          .description ??
+                        {form.description ??
                           'Sin descripción.'}
                       </p>
 

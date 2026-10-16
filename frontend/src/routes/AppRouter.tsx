@@ -16,6 +16,8 @@ import DynamicFormPage from '../pages/DynamicFormPage'
 import LoginPage from '../pages/LoginPage'
 import ProjectFormsPage from '../pages/ProjectFormsPage'
 import ProjectsPage from '../pages/ProjectsPage'
+import SurveyDetailPage from '../pages/SurveyDetailPage'
+import SurveysPage from '../pages/SurveysPage'
 
 
 interface ProtectedRouteProps {
@@ -73,6 +75,24 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ProjectFormsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/projects/:projectId/surveys"
+        element={
+          <ProtectedRoute>
+            <SurveysPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/projects/:projectId/surveys/:surveyId"
+        element={
+          <ProtectedRoute>
+            <SurveyDetailPage />
           </ProtectedRoute>
         }
       />

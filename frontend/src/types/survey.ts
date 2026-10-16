@@ -1,3 +1,21 @@
+import type {
+  SurveyAnswer,
+} from './surveyAnswer'
+
+
+export interface SurveyRecord {
+  id: number
+  uuid: string
+  form_version_id: number
+  user_id: number
+  status: string
+  latitude: number | null
+  longitude: number | null
+  captured_at: string
+  received_at: string
+}
+
+
 export interface SurveyAnswerPayload {
   form_field_id: number
   value_text?: string
@@ -6,6 +24,7 @@ export interface SurveyAnswerPayload {
   value_boolean?: boolean
   field_option_id?: number
 }
+
 
 export interface SurveySyncPayload {
   uuid: string
@@ -16,17 +35,8 @@ export interface SurveySyncPayload {
   answers: SurveyAnswerPayload[]
 }
 
+
 export interface SurveySyncResponse {
-  survey: {
-    id: number
-    uuid: string
-    form_version_id: number
-    user_id: number
-    status: string
-    latitude: number | null
-    longitude: number | null
-    captured_at: string
-    received_at: string
-  }
-  answers: unknown[]
+  survey: SurveyRecord
+  answers: SurveyAnswer[]
 }

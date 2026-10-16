@@ -17,8 +17,16 @@ import {
 import api from '../api/client'
 
 import {
+  downloadFormVersionExport,
+} from '../api/exports'
+
+import {
   getSurveys,
 } from '../api/surveys'
+
+import type {
+  ExportFormat,
+} from '../api/exports'
 
 import type {
   Form,
@@ -39,6 +47,13 @@ import type {
 
 interface SurveyListItem {
   survey: SurveyRecord
+  formName: string
+  versionNumber: number
+}
+
+
+interface ExportableVersion {
+  id: number
   formName: string
   versionNumber: number
 }
@@ -92,6 +107,14 @@ function SurveysPage() {
     )
 
   const [
+    exportableVersions,
+    setExportableVersions,
+  ] =
+    useState<ExportableVersion[]>(
+      [],
+    )
+
+  const [
     isLoading,
     setIsLoading,
   ] =
@@ -100,6 +123,18 @@ function SurveysPage() {
   const [
     error,
     setError,
+  ] =
+    useState('')
+
+  const [
+    exportError,
+    setExportError,
+  ] =
+    useState('')
+
+  const [
+    downloadingExport,
+    setDownloadingExport,
   ] =
     useState('')
 
@@ -179,6 +214,10 @@ function SurveysPage() {
               }
             >()
 
+          const availableExports:
+            ExportableVersion[] =
+            []
+
           versionsByForm.forEach(
             ({
               form,
@@ -193,7 +232,22 @@ function SurveysPage() {
                         form.name,
 
                       versionNumber:
-                        version.version_number,
+                        version
+                          .version_number,
+                    },
+                  )
+
+                  availableExports.push(
+                    {
+                      id:
+                        version.id,
+
+                      formName:
+                        form.name,
+
+                      versionNumber:
+                        version
+                          .version_number,
                     },
                   )
                 },
@@ -206,21 +260,24 @@ function SurveysPage() {
               .filter(
                 (survey) =>
                   versionMap.has(
-                    survey.form_version_id,
+                    survey
+                      .form_version_id,
                   ),
               )
               .map(
                 (survey) => {
                   const versionInfo =
                     versionMap.get(
-                      survey.form_version_id,
+                      survey
+                        .form_version_id,
                     )
 
                   return {
                     survey,
 
                     formName:
-                      versionInfo?.formName ??
+                      versionInfo
+                        ?.formName ??
                       'Formulario',
 
                     versionNumber:
@@ -231,12 +288,41 @@ function SurveysPage() {
                 },
               )
 
+          availableExports.sort(
+            (
+              first,
+              second,
+            ) => {
+              const nameComparison =
+                first.formName.localeCompare(
+                  second.formName,
+                  'es',
+                )
+
+              if (
+                nameComparison !==
+                0
+              ) {
+                return nameComparison
+              }
+
+              return (
+                second.versionNumber -
+                first.versionNumber
+              )
+            },
+          )
+
           setProject(
             projectResponse.data,
           )
 
           setSurveys(
             projectSurveys,
+          )
+
+          setExportableVersions(
+            availableExports,
           )
         } catch (
           requestError
@@ -294,6 +380,81 @@ function SurveysPage() {
     navigate,
     projectId,
   ])
+
+
+  const handleExport =
+    async (
+      version:
+        ExportableVersion,
+      format:
+        ExportFormat,
+    ) => {
+      const exportKey =
+        `${version.id}-${format}`
+
+      setDownloadingExport(
+        exportKey,
+      )
+
+      setExportError('')
+
+      try {
+        await downloadFormVersionExport(
+          version.id,
+          format,
+        )
+      } catch (
+        requestError
+      ) {
+        if (
+          axios.isAxiosError(
+            requestError,
+          )
+        ) {
+          const status =
+            requestError
+              .response
+              ?.status
+
+          if (status === 401) {
+            clearSession()
+
+            navigate(
+              '/login',
+              {
+                replace: true,
+              },
+            )
+
+            return
+          }
+
+          if (status === 403) {
+            setExportError(
+              'No tienes autorización para exportar los datos de esta versión.',
+            )
+
+            return
+          }
+
+          if (status === 404) {
+            setExportError(
+              'La versión del formulario ya no está disponible.',
+            )
+
+            return
+          }
+        }
+
+        setExportError(
+          'No fue posible generar el archivo. Verifica la conexión con el servidor.',
+        )
+      } finally {
+        setDownloadingExport(
+          '',
+        )
+      }
+    }
 
 
   if (isLoading) {
@@ -378,6 +539,129 @@ function SurveysPage() {
                 </div>
               </div>
 
+              {exportError && (
+                <div
+                  className="alert alert-error"
+                  role="alert"
+                  style={{
+                    marginBottom:
+                      '20px',
+                  }}
+                >
+                  {exportError}
+                </div>
+              )}
+
+              {exportableVersions.length >
+                0 && (
+                <article
+                  className="project-card"
+                  style={{
+                    marginBottom:
+                      '28px',
+                  }}
+                >
+                  <div className="card-heading">
+                    <div>
+                      <h2>
+                        Exportar datos
+                      </h2>
+                    </div>
+                  </div>
+
+                  <p>
+                    Descarga las encuestas
+                    enviadas en formato CSV
+                    o Excel.
+                  </p>
+
+                  {exportableVersions.map(
+                    (version) => (
+                      <div
+                        key={
+                          version.id
+                        }
+                        style={{
+                          padding:
+                            '14px 0',
+                          borderTop:
+                            '1px solid #e2e8f0',
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin:
+                              '0 0 12px',
+                          }}
+                        >
+                          <strong>
+                            {
+                              version.formName
+                            }
+                          </strong>
+                          {' · '}
+                          Versión{' '}
+                          {
+                            version.versionNumber
+                          }
+                        </p>
+
+                        <div
+                          style={{
+                            display:
+                              'flex',
+                            gap:
+                              '10px',
+                            flexWrap:
+                              'wrap',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="primary-action"
+                            disabled={
+                              downloadingExport !==
+                              ''
+                            }
+                            onClick={() =>
+                              void handleExport(
+                                version,
+                                'csv',
+                              )
+                            }
+                          >
+                            {downloadingExport ===
+                            `${version.id}-csv`
+                              ? 'Generando CSV...'
+                              : 'Descargar CSV'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="outline-action"
+                            disabled={
+                              downloadingExport !==
+                              ''
+                            }
+                            onClick={() =>
+                              void handleExport(
+                                version,
+                                'xlsx',
+                              )
+                            }
+                          >
+                            {downloadingExport ===
+                            `${version.id}-xlsx`
+                              ? 'Generando Excel...'
+                              : 'Descargar Excel'}
+                          </button>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </article>
+              )}
+
               {surveys.length ===
                 0 ? (
                 <div className="empty-state">
@@ -451,7 +735,8 @@ function SurveysPage() {
                             Capturada:
                           </strong>{' '}
                           {formatDateTime(
-                            survey.captured_at,
+                            survey
+                              .captured_at,
                           )}
                         </p>
 
@@ -460,7 +745,8 @@ function SurveysPage() {
                             Recibida:
                           </strong>{' '}
                           {formatDateTime(
-                            survey.received_at,
+                            survey
+                              .received_at,
                           )}
                         </p>
 

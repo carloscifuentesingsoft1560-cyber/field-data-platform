@@ -559,6 +559,18 @@ function AdminProjectsPage() {
             className="secondary-button"
             onClick={() =>
               navigate(
+                '/admin/users',
+              )
+            }
+          >
+            Usuarios
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() =>
+              navigate(
                 '/projects',
               )
             }

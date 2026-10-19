@@ -9,12 +9,22 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import Role
-from backend.schemas.role import RoleResponse
+from backend.schemas.role import (
+    RoleResponse,
+)
+from backend.security import (
+    require_control_role,
+)
 
 
 router = APIRouter(
     prefix="/roles",
     tags=["roles"],
+    dependencies=[
+        Depends(
+            require_control_role
+        )
+    ],
 )
 
 
@@ -24,14 +34,20 @@ router = APIRouter(
 
 @router.get(
     "/",
-    response_model=list[RoleResponse],
+    response_model=list[
+        RoleResponse
+    ],
 )
 def get_roles(
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     roles = db.scalars(
         select(Role)
-        .order_by(Role.id)
+        .order_by(
+            Role.id
+        )
     ).all()
 
     return roles
@@ -46,13 +62,16 @@ def get_roles(
     response_model=RoleResponse,
     responses={
         404: {
-            "description": "Rol no encontrado"
+            "description":
+                "Rol no encontrado"
         }
     },
 )
 def get_role(
     role_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
 ):
     role = db.scalar(
         select(Role).where(
@@ -62,8 +81,12 @@ def get_role(
 
     if role is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rol no encontrado",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Rol no encontrado"
+            ),
         )
 
     return role

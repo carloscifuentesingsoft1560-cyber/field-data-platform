@@ -13,6 +13,7 @@ import {
 } from '../api/auth'
 
 import AdminProjectsPage from '../pages/AdminProjectsPage'
+import AdminUsersPage from '../pages/AdminUsersPage'
 import DynamicFormPage from '../pages/DynamicFormPage'
 import LoginPage from '../pages/LoginPage'
 import ProjectFormsPage from '../pages/ProjectFormsPage'
@@ -76,6 +77,15 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <AdminProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute>
+            <AdminUsersPage />
           </ProtectedRoute>
         }
       />

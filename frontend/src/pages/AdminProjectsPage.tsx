@@ -476,12 +476,60 @@ function AdminProjectsPage() {
         return
       }
 
-      const confirmed =
+      // ======================================================
+      // CONFIRMACIÓN 1
+      // ======================================================
+
+      const firstConfirmation =
         window.confirm(
-          `¿Deseas eliminar el proyecto "${project.name}"? Solo puede eliminarse si todavía no tiene formularios asociados.`,
+          `¿Deseas eliminar el proyecto "${project.name}"?`,
         )
 
-      if (!confirmed) {
+      if (
+        !firstConfirmation
+      ) {
+        return
+      }
+
+      // ======================================================
+      // CONFIRMACIÓN 2
+      // ======================================================
+
+      const secondConfirmation =
+        window.confirm(
+          'ADVERTENCIA: esta acción eliminará permanentemente todos los datos del proyecto, incluyendo formularios, versiones, campos, opciones, encuestas, respuestas, correcciones y asignaciones de usuarios.\n\nEsta operación no se puede deshacer.\n\n¿Deseas continuar?',
+        )
+
+      if (
+        !secondConfirmation
+      ) {
+        return
+      }
+
+      // ======================================================
+      // CONFIRMACIÓN 3
+      // ======================================================
+
+      const typedConfirmation =
+        window.prompt(
+          `Para eliminar definitivamente el proyecto, escribe exactamente su nombre:\n\n${project.name}`,
+        )
+
+      if (
+        typedConfirmation ===
+        null
+      ) {
+        return
+      }
+
+      if (
+        typedConfirmation.trim()
+        !== project.name.trim()
+      ) {
+        setError(
+          'El nombre escrito no coincide con el proyecto. No se realizó ninguna eliminación.',
+        )
+
         return
       }
 
@@ -491,10 +539,11 @@ function AdminProjectsPage() {
       try {
         await deleteProject(
           project.id,
+          typedConfirmation.trim(),
         )
 
         setSuccess(
-          'Proyecto eliminado correctamente.',
+          `El proyecto "${project.name}" y todos sus datos asociados fueron eliminados definitivamente.`,
         )
 
         if (
@@ -513,13 +562,28 @@ function AdminProjectsPage() {
             requestError,
           )
         ) {
-          const status =
+          const requestStatus =
             requestError
               .response
               ?.status
 
           if (
-            status === 403
+            requestStatus ===
+            400
+          ) {
+            setError(
+              getApiErrorMessage(
+                requestError,
+                'La confirmación del proyecto no es válida.',
+              ),
+            )
+
+            return
+          }
+
+          if (
+            requestStatus ===
+            403
           ) {
             setError(
               getApiErrorMessage(
@@ -532,14 +596,17 @@ function AdminProjectsPage() {
           }
 
           if (
-            status === 409
+            requestStatus ===
+            404
           ) {
             setError(
               getApiErrorMessage(
                 requestError,
-                'El proyecto tiene información asociada y no puede eliminarse.',
+                'El proyecto ya no existe.',
               ),
             )
+
+            await loadProjects()
 
             return
           }
@@ -555,7 +622,9 @@ function AdminProjectsPage() {
     }
 
 
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
       <main className="center-page">
         <p>
@@ -695,6 +764,7 @@ function AdminProjectsPage() {
                         current,
                       ) => ({
                         ...current,
+
                         name:
                           event
                             .target
@@ -728,6 +798,7 @@ function AdminProjectsPage() {
                         current,
                       ) => ({
                         ...current,
+
                         status:
                           event
                             .target
@@ -736,11 +807,15 @@ function AdminProjectsPage() {
                     )
                   }
                 >
-                  <option value="active">
+                  <option
+                    value="active"
+                  >
                     Activo
                   </option>
 
-                  <option value="inactive">
+                  <option
+                    value="inactive"
+                  >
                     Inactivo
                   </option>
                 </select>
@@ -770,6 +845,7 @@ function AdminProjectsPage() {
                         current,
                       ) => ({
                         ...current,
+
                         start_date:
                           event
                             .target
@@ -804,6 +880,7 @@ function AdminProjectsPage() {
                         current,
                       ) => ({
                         ...current,
+
                         end_date:
                           event
                             .target
@@ -838,6 +915,7 @@ function AdminProjectsPage() {
                       current,
                     ) => ({
                       ...current,
+
                       description:
                         event
                           .target

@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status,
 )
 from sqlalchemy import (
@@ -12,8 +13,14 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import (
+    FieldOption,
     Form,
+    FormField,
+    FormVersion,
     Project,
+    Survey,
+    SurveyAnswer,
+    SurveyAnswerCorrection,
     User,
     UserProject,
 )
@@ -58,7 +65,7 @@ def validate_project_access(
                 status.HTTP_404_NOT_FOUND
             ),
             detail=(
-                "Project not found"
+                "Proyecto no encontrado"
             ),
         )
 
@@ -185,9 +192,6 @@ def create_project(
         db_project
     )
 
-    # Obtenemos el ID antes del commit
-    # para crear la asignación
-    # UserProject.
     db.flush()
 
     user_project = UserProject(
@@ -203,8 +207,6 @@ def create_project(
         user_project
     )
 
-    # Proyecto y asignación se guardan
-    # dentro de la misma transacción.
     db.commit()
 
     db.refresh(
@@ -237,7 +239,7 @@ def create_project(
         },
         404: {
             "description": (
-                "Project not found"
+                "Proyecto no encontrado"
             )
         },
     },
@@ -287,7 +289,7 @@ def get_project(
         },
         404: {
             "description": (
-                "Project not found"
+                "Proyecto no encontrado"
             )
         },
         422: {
@@ -347,7 +349,7 @@ def update_project(
                 status.HTTP_422_UNPROCESSABLE_ENTITY
             ),
             detail=(
-                "La fecha de finalizacion "
+                "La fecha de finalización "
                 "no puede ser anterior a "
                 "la fecha de inicio"
             ),
@@ -373,7 +375,8 @@ def update_project(
 
 
 # ============================================================
-# ELIMINAR PROYECTO
+# ELIMINAR PROYECTO DEFINITIVAMENTE
+# DIRECTOR / JEFE NACIONAL
 # ============================================================
 
 @router.delete(
@@ -381,7 +384,14 @@ def update_project(
     responses={
         200: {
             "description": (
-                "Proyecto eliminado correctamente"
+                "Proyecto y datos asociados "
+                "eliminados correctamente"
+            )
+        },
+        400: {
+            "description": (
+                "Confirmación de eliminación "
+                "incorrecta"
             )
         },
         401: {
@@ -397,19 +407,20 @@ def update_project(
         },
         404: {
             "description": (
-                "Project not found"
-            )
-        },
-        409: {
-            "description": (
-                "El proyecto tiene formularios "
-                "asociados y no puede eliminarse"
+                "Proyecto no encontrado"
             )
         },
     },
 )
 def delete_project(
     project_id: int,
+    confirmation: str = Query(
+        ...,
+        description=(
+            "Nombre exacto del proyecto "
+            "como confirmación"
+        ),
+    ),
     db: Session = Depends(
         get_db
     ),
@@ -428,54 +439,282 @@ def delete_project(
     )
 
     # --------------------------------------------------------
-    # NO PERMITIR ELIMINAR PROYECTOS CON FORMULARIOS
+    # CONFIRMACIÓN FINAL
     # --------------------------------------------------------
 
-    existing_form = db.scalar(
-        select(Form.id).where(
-            Form.project_id
-            == project.id
-        )
-    )
-
     if (
-        existing_form
-        is not None
+        confirmation.strip()
+        != project.name.strip()
     ):
         raise HTTPException(
             status_code=(
-                status.HTTP_409_CONFLICT
+                status.HTTP_400_BAD_REQUEST
             ),
             detail=(
-                "No se puede eliminar el proyecto "
-                "porque tiene formularios asociados"
+                "La confirmación no coincide "
+                "con el nombre del proyecto"
             ),
         )
 
-    # --------------------------------------------------------
-    # ELIMINAR ASIGNACIONES USER_PROJECT
-    # --------------------------------------------------------
+    try:
+        # ----------------------------------------------------
+        # IDENTIFICAR FORMULARIOS
+        # ----------------------------------------------------
 
-    db.execute(
-        delete(
-            UserProject
-        ).where(
-            UserProject.project_id
-            == project.id
+        form_ids = list(
+            db.scalars(
+                select(Form.id).where(
+                    Form.project_id
+                    == project.id
+                )
+            ).all()
         )
-    )
 
-    # --------------------------------------------------------
-    # ELIMINAR PROYECTO
-    # --------------------------------------------------------
+        # ----------------------------------------------------
+        # IDENTIFICAR VERSIONES
+        # ----------------------------------------------------
 
-    db.delete(
-        project
-    )
+        if form_ids:
+            version_ids = list(
+                db.scalars(
+                    select(
+                        FormVersion.id
+                    ).where(
+                        FormVersion.form_id.in_(
+                            form_ids
+                        )
+                    )
+                ).all()
+            )
+        else:
+            version_ids = []
 
-    db.commit()
+        # ----------------------------------------------------
+        # IDENTIFICAR CAMPOS
+        # ----------------------------------------------------
+
+        if version_ids:
+            field_ids = list(
+                db.scalars(
+                    select(
+                        FormField.id
+                    ).where(
+                        FormField
+                        .form_version_id
+                        .in_(
+                            version_ids
+                        )
+                    )
+                ).all()
+            )
+        else:
+            field_ids = []
+
+        # ----------------------------------------------------
+        # IDENTIFICAR ENCUESTAS
+        # ----------------------------------------------------
+
+        if version_ids:
+            survey_ids = list(
+                db.scalars(
+                    select(
+                        Survey.id
+                    ).where(
+                        Survey
+                        .form_version_id
+                        .in_(
+                            version_ids
+                        )
+                    )
+                ).all()
+            )
+        else:
+            survey_ids = []
+
+        # ----------------------------------------------------
+        # IDENTIFICAR RESPUESTAS
+        # ----------------------------------------------------
+
+        if survey_ids:
+            answer_ids = list(
+                db.scalars(
+                    select(
+                        SurveyAnswer.id
+                    ).where(
+                        SurveyAnswer
+                        .survey_id
+                        .in_(
+                            survey_ids
+                        )
+                    )
+                ).all()
+            )
+        else:
+            answer_ids = []
+
+        # ----------------------------------------------------
+        # 1. HISTORIAL DE CORRECCIONES
+        # ----------------------------------------------------
+
+        if answer_ids:
+            db.execute(
+                delete(
+                    SurveyAnswerCorrection
+                ).where(
+                    SurveyAnswerCorrection
+                    .survey_answer_id
+                    .in_(
+                        answer_ids
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # 2. RESPUESTAS
+        # ----------------------------------------------------
+
+        if survey_ids:
+            db.execute(
+                delete(
+                    SurveyAnswer
+                ).where(
+                    SurveyAnswer
+                    .survey_id
+                    .in_(
+                        survey_ids
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # 3. ENCUESTAS
+        # ----------------------------------------------------
+
+        if version_ids:
+            db.execute(
+                delete(
+                    Survey
+                ).where(
+                    Survey
+                    .form_version_id
+                    .in_(
+                        version_ids
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # 4. OPCIONES DE CAMPOS
+        # ----------------------------------------------------
+
+        if field_ids:
+            db.execute(
+                delete(
+                    FieldOption
+                ).where(
+                    FieldOption
+                    .form_field_id
+                    .in_(
+                        field_ids
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # 5. CAMPOS
+        # ----------------------------------------------------
+
+        if version_ids:
+            db.execute(
+                delete(
+                    FormField
+                ).where(
+                    FormField
+                    .form_version_id
+                    .in_(
+                        version_ids
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # 6. VERSIONES
+        # ----------------------------------------------------
+
+        if form_ids:
+            db.execute(
+                delete(
+                    FormVersion
+                ).where(
+                    FormVersion
+                    .form_id
+                    .in_(
+                        form_ids
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # 7. FORMULARIOS
+        # ----------------------------------------------------
+
+        db.execute(
+            delete(
+                Form
+            ).where(
+                Form.project_id
+                == project.id
+            )
+        )
+
+        # ----------------------------------------------------
+        # 8. ASIGNACIONES DE USUARIOS
+        # ----------------------------------------------------
+
+        db.execute(
+            delete(
+                UserProject
+            ).where(
+                UserProject.project_id
+                == project.id
+            )
+        )
+
+        # ----------------------------------------------------
+        # 9. PROYECTO
+        # ----------------------------------------------------
+
+        db.delete(
+            project
+        )
+
+        # TODO SE CONFIRMA EN UNA SOLA TRANSACCIÓN.
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
 
     return {
-        "message":
-            "Project deleted"
+        "message": (
+            "Proyecto y todos sus datos "
+            "asociados fueron eliminados "
+            "definitivamente"
+        ),
+        "deleted": {
+            "forms":
+                len(form_ids),
+
+            "versions":
+                len(version_ids),
+
+            "fields":
+                len(field_ids),
+
+            "surveys":
+                len(survey_ids),
+
+            "answers":
+                len(answer_ids),
+        },
     }

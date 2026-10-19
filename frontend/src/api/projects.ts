@@ -47,8 +47,14 @@ export async function updateProject(
 
 export async function deleteProject(
   projectId: number,
+  confirmation: string,
 ): Promise<void> {
   await api.delete(
     `/projects/${projectId}`,
+    {
+      params: {
+        confirmation,
+      },
+    },
   )
 }

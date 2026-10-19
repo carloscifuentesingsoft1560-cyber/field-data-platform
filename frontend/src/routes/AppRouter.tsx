@@ -12,6 +12,11 @@ import {
   hasValidSession,
 } from '../api/auth'
 
+import {
+  hasSessionExpired,
+} from '../api/session'
+
+import AdminFormsPage from '../pages/AdminFormsPage'
 import AdminProjectsPage from '../pages/AdminProjectsPage'
 import AdminUsersPage from '../pages/AdminUsersPage'
 import DynamicFormPage from '../pages/DynamicFormPage'
@@ -30,10 +35,20 @@ interface ProtectedRouteProps {
 function ProtectedRoute({
   children,
 }: ProtectedRouteProps) {
-  if (!hasValidSession()) {
+  const validSession =
+    hasValidSession()
+
+  if (!validSession) {
+    const expired =
+      hasSessionExpired()
+
     return (
       <Navigate
-        to="/login"
+        to={
+          expired
+            ? '/login?expired=1'
+            : '/login'
+        }
         replace
       />
     )
@@ -77,6 +92,15 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <AdminProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/projects/:projectId/forms"
+        element={
+          <ProtectedRoute>
+            <AdminFormsPage />
           </ProtectedRoute>
         }
       />

@@ -1,17 +1,18 @@
 import api from './client'
 
+import {
+  ACCESS_TOKEN_KEY,
+  TOKEN_EXPIRES_AT_KEY,
+  clearSessionExpired,
+  clearStoredSession,
+  markSessionExpired,
+} from './session'
+
 import type {
   AuthUser,
   LoginRequest,
   TokenResponse,
 } from '../types/auth'
-
-
-const ACCESS_TOKEN_KEY =
-  'access_token'
-
-const TOKEN_EXPIRES_AT_KEY =
-  'token_expires_at'
 
 
 export async function login(
@@ -27,7 +28,8 @@ export async function login(
 }
 
 
-export async function getCurrentUser():
+export async function
+getCurrentUser():
 Promise<AuthUser> {
   const response =
     await api.get<AuthUser>(
@@ -54,17 +56,14 @@ export function saveSession(
     TOKEN_EXPIRES_AT_KEY,
     expiresAt.toString(),
   )
+
+  clearSessionExpired()
 }
 
 
-export function clearSession(): void {
-  localStorage.removeItem(
-    ACCESS_TOKEN_KEY,
-  )
-
-  localStorage.removeItem(
-    TOKEN_EXPIRES_AT_KEY,
-  )
+export function clearSession():
+void {
+  clearStoredSession()
 }
 
 
@@ -83,26 +82,37 @@ number | null {
     const parts =
       token.split('.')
 
-    if (parts.length !== 3) {
+    if (
+      parts.length !== 3
+    ) {
       return null
     }
 
     const normalized =
       parts[1]
-        .replace(/-/g, '+')
-        .replace(/_/g, '/')
+        .replace(
+          /-/g,
+          '+',
+        )
+        .replace(
+          /_/g,
+          '/',
+        )
 
     const padded =
       normalized.padEnd(
         Math.ceil(
-          normalized.length / 4,
+          normalized.length /
+            4,
         ) * 4,
         '=',
       )
 
     const payload =
       JSON.parse(
-        atob(padded),
+        atob(
+          padded,
+        ),
       ) as {
         sub?: string
       }
@@ -112,10 +122,14 @@ number | null {
     }
 
     const userId =
-      Number(payload.sub)
+      Number(
+        payload.sub,
+      )
 
     if (
-      Number.isNaN(userId)
+      Number.isNaN(
+        userId,
+      )
     ) {
       return null
     }
@@ -143,7 +157,7 @@ boolean {
     !token ||
     !expiresAtValue
   ) {
-    clearSession()
+    clearStoredSession()
 
     return false
   }
@@ -156,11 +170,20 @@ boolean {
   if (
     Number.isNaN(
       expiresAt,
-    ) ||
-    Date.now() >=
-      expiresAt
+    )
   ) {
-    clearSession()
+    clearStoredSession()
+
+    return false
+  }
+
+  if (
+    Date.now() >=
+    expiresAt
+  ) {
+    clearStoredSession()
+
+    markSessionExpired()
 
     return false
   }

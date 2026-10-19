@@ -8,6 +8,7 @@ import axios from 'axios'
 import {
   Navigate,
   useNavigate,
+  useSearchParams,
 } from 'react-router-dom'
 
 import {
@@ -16,6 +17,10 @@ import {
   login,
   saveSession,
 } from '../api/auth'
+
+import {
+  hasSessionExpired,
+} from '../api/session'
 
 
 interface ApiError {
@@ -26,6 +31,11 @@ interface ApiError {
 function LoginPage() {
   const navigate =
     useNavigate()
+
+  const [
+    searchParams,
+  ] =
+    useSearchParams()
 
   const [
     employeeNumber,
@@ -52,7 +62,17 @@ function LoginPage() {
     useState(false)
 
 
-  if (hasValidSession()) {
+  const validSession =
+    hasValidSession()
+
+  const sessionExpired =
+    searchParams.get(
+      'expired',
+    ) === '1' ||
+    hasSessionExpired()
+
+
+  if (validSession) {
     return (
       <Navigate
         to="/projects"
@@ -83,7 +103,9 @@ function LoginPage() {
       }
 
       try {
-        setIsLoading(true)
+        setIsLoading(
+          true,
+        )
 
         const tokenData =
           await login({
@@ -97,13 +119,6 @@ function LoginPage() {
           tokenData,
         )
 
-        /*
-         * ProjectsPage ya consulta
-         * /auth/me al cargar.
-         *
-         * Evitamos hacer aquí una
-         * consulta duplicada.
-         */
         navigate(
           '/projects',
           {
@@ -135,7 +150,9 @@ function LoginPage() {
           )
         }
       } finally {
-        setIsLoading(false)
+        setIsLoading(
+          false,
+        )
       }
     }
 
@@ -177,6 +194,16 @@ function LoginPage() {
               credenciales asignadas.
             </p>
           </div>
+
+          {sessionExpired && (
+            <div
+              className="alert alert-offline"
+              role="status"
+            >
+              Tu sesión expiró.
+              Inicia sesión nuevamente.
+            </div>
+          )}
 
           <label>
             Número de empleado

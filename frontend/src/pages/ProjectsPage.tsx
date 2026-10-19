@@ -33,11 +33,22 @@ import type {
 } from '../types/project'
 
 
+const CONTROL_ROLES = new Set([
+  'director',
+  'jefe_nacional',
+  'coordinador',
+  'analista',
+])
+
+
 function ProjectsPage() {
   const navigate =
     useNavigate()
 
-  const [user, setUser] =
+  const [
+    user,
+    setUser,
+  ] =
     useState<AuthUser | null>(
       null,
     )
@@ -45,20 +56,26 @@ function ProjectsPage() {
   const [
     projects,
     setProjects,
-  ] = useState<Project[]>([])
+  ] =
+    useState<Project[]>([])
 
   const [
     isLoading,
     setIsLoading,
-  ] = useState(true)
+  ] =
+    useState(true)
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState('')
 
   const [
     isOfflineData,
     setIsOfflineData,
-  ] = useState(false)
+  ] =
+    useState(false)
 
 
   useEffect(() => {
@@ -168,8 +185,8 @@ function ProjectsPage() {
 
             if (
               !cachedUser &&
-              cachedProjects
-                .length === 0
+              cachedProjects.length ===
+                0
             ) {
               setError(
                 'No fue posible cargar los proyectos y no hay información disponible sin conexión.',
@@ -262,6 +279,23 @@ function ProjectsPage() {
               </span>
             </div>
           )}
+
+          {user &&
+            CONTROL_ROLES.has(
+              user.role_name,
+            ) && (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() =>
+                  navigate(
+                    '/admin/projects',
+                  )
+                }
+              >
+                Administrar
+              </button>
+            )}
 
           <button
             className="secondary-button"

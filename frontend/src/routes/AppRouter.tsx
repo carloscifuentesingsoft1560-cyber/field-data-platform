@@ -12,6 +12,7 @@ import {
   hasValidSession,
 } from '../api/auth'
 
+import AdminProjectsPage from '../pages/AdminProjectsPage'
 import DynamicFormPage from '../pages/DynamicFormPage'
 import LoginPage from '../pages/LoginPage'
 import ProjectFormsPage from '../pages/ProjectFormsPage'
@@ -66,6 +67,15 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/projects"
+        element={
+          <ProtectedRoute>
+            <AdminProjectsPage />
           </ProtectedRoute>
         }
       />

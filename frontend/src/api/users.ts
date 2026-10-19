@@ -43,3 +43,18 @@ export async function updateUser(
 
   return response.data
 }
+
+
+export async function
+resetUserPassword(
+  userId: number,
+  newPassword: string,
+): Promise<void> {
+  await api.patch(
+    `/users/${userId}/reset-password`,
+    {
+      new_password:
+        newPassword,
+    },
+  )
+}

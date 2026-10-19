@@ -104,8 +104,7 @@ def test_login_with_unknown_user_returns_401(
 
     assert response.json() == {
         "detail": (
-            "Número de empleado "
-            "o contraseña incorrectos"
+            "Usuario o contraseña incorrectos"
         )
     }
 

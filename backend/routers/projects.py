@@ -25,6 +25,7 @@ from backend.schemas.project import (
 from backend.security import (
     get_current_user,
     require_control_role,
+    require_project_delete_role,
 )
 
 
@@ -53,8 +54,12 @@ def validate_project_access(
 
     if project is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Project not found"
+            ),
         )
 
     user_project = db.scalar(
@@ -68,7 +73,9 @@ def validate_project_access(
 
     if user_project is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
             detail=(
                 "El usuario no está asignado "
                 "a este proyecto"
@@ -84,7 +91,9 @@ def validate_project_access(
 
 @router.get(
     "/projects",
-    response_model=list[ProjectResponse],
+    response_model=list[
+        ProjectResponse
+    ],
     responses={
         401: {
             "description": (
@@ -130,8 +139,12 @@ def get_projects(
 
 @router.post(
     "/projects",
-    status_code=status.HTTP_201_CREATED,
-    response_model=ProjectResponse,
+    status_code=(
+        status.HTTP_201_CREATED
+    ),
+    response_model=(
+        ProjectResponse
+    ),
     responses={
         401: {
             "description": (
@@ -156,10 +169,16 @@ def create_project(
 ):
     db_project = Project(
         name=project.name,
-        description=project.description,
+        description=(
+            project.description
+        ),
         status=project.status,
-        start_date=project.start_date,
-        end_date=project.end_date,
+        start_date=(
+            project.start_date
+        ),
+        end_date=(
+            project.end_date
+        ),
     )
 
     db.add(
@@ -167,12 +186,17 @@ def create_project(
     )
 
     # Obtenemos el ID antes del commit
-    # para crear la asignación UserProject.
+    # para crear la asignación
+    # UserProject.
     db.flush()
 
     user_project = UserProject(
-        user_id=current_user.id,
-        project_id=db_project.id,
+        user_id=(
+            current_user.id
+        ),
+        project_id=(
+            db_project.id
+        ),
     )
 
     db.add(
@@ -196,7 +220,9 @@ def create_project(
 
 @router.get(
     "/projects/{project_id}",
-    response_model=ProjectResponse,
+    response_model=(
+        ProjectResponse
+    ),
     responses={
         401: {
             "description": (
@@ -225,10 +251,14 @@ def get_project(
         get_db
     ),
 ):
-    project = validate_project_access(
-        project_id=project_id,
-        current_user=current_user,
-        db=db,
+    project = (
+        validate_project_access(
+            project_id=project_id,
+            current_user=(
+                current_user
+            ),
+            db=db,
+        )
     )
 
     return project
@@ -240,7 +270,9 @@ def get_project(
 
 @router.patch(
     "/projects/{project_id}",
-    response_model=ProjectResponse,
+    response_model=(
+        ProjectResponse
+    ),
     responses={
         401: {
             "description": (
@@ -275,10 +307,14 @@ def update_project(
         require_control_role
     ),
 ):
-    project = validate_project_access(
-        project_id=project_id,
-        current_user=current_user,
-        db=db,
+    project = (
+        validate_project_access(
+            project_id=project_id,
+            current_user=(
+                current_user
+            ),
+            db=db,
+        )
     )
 
     update_data = (
@@ -317,9 +353,10 @@ def update_project(
             ),
         )
 
-    for field, value in (
-        update_data.items()
-    ):
+    for (
+        field,
+        value,
+    ) in update_data.items():
         setattr(
             project,
             field,
@@ -354,8 +391,8 @@ def update_project(
         },
         403: {
             "description": (
-                "Rol no autorizado o usuario "
-                "sin acceso al proyecto"
+                "Solo Director o Jefe Nacional "
+                "pueden eliminar proyectos"
             )
         },
         404: {
@@ -377,13 +414,17 @@ def delete_project(
         get_db
     ),
     current_user: User = Depends(
-        require_control_role
+        require_project_delete_role
     ),
 ):
-    project = validate_project_access(
-        project_id=project_id,
-        current_user=current_user,
-        db=db,
+    project = (
+        validate_project_access(
+            project_id=project_id,
+            current_user=(
+                current_user
+            ),
+            db=db,
+        )
     )
 
     # --------------------------------------------------------
@@ -392,13 +433,19 @@ def delete_project(
 
     existing_form = db.scalar(
         select(Form.id).where(
-            Form.project_id == project.id
+            Form.project_id
+            == project.id
         )
     )
 
-    if existing_form is not None:
+    if (
+        existing_form
+        is not None
+    ):
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
             detail=(
                 "No se puede eliminar el proyecto "
                 "porque tiene formularios asociados"
@@ -410,7 +457,9 @@ def delete_project(
     # --------------------------------------------------------
 
     db.execute(
-        delete(UserProject).where(
+        delete(
+            UserProject
+        ).where(
             UserProject.project_id
             == project.id
         )
@@ -427,7 +476,6 @@ def delete_project(
     db.commit()
 
     return {
-        "message": (
+        "message":
             "Project deleted"
-        )
     }

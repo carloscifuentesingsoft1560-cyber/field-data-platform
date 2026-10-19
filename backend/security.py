@@ -1,6 +1,10 @@
 import os
-from datetime import datetime, timedelta, timezone
 from collections.abc import Callable
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 
 import jwt
 from dotenv import load_dotenv
@@ -19,7 +23,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models import Role, User
+from backend.models import (
+    Role,
+    User,
+)
 
 
 load_dotenv()
@@ -36,6 +43,19 @@ CONTROL_ROLES = {
     "analista",
 }
 
+
+PROJECT_DELETE_ROLES = {
+    "director",
+    "jefe_nacional",
+}
+
+
+PASSWORD_RESET_ROLES = {
+    "director",
+    "jefe_nacional",
+}
+
+
 OPERATION_ROLES = {
     "auxiliar",
     "vendedor",
@@ -47,7 +67,9 @@ OPERATION_ROLES = {
 # CONTRASEÑAS
 # ============================================================
 
-password_hash = PasswordHash.recommended()
+password_hash = (
+    PasswordHash.recommended()
+)
 
 
 def hash_password(
@@ -84,6 +106,7 @@ if not JWT_SECRET_KEY:
 
 JWT_ALGORITHM = "HS256"
 
+
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv(
         "JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
@@ -109,7 +132,9 @@ def create_access_token(
     )
 
     payload = {
-        "sub": str(user_id),
+        "sub": str(
+            user_id
+        ),
         "iat": now,
         "exp": expires_at,
     }
@@ -144,13 +169,18 @@ def decode_access_token(
                 status_code=(
                     status.HTTP_401_UNAUTHORIZED
                 ),
-                detail="Token inválido",
+                detail=(
+                    "Token inválido"
+                ),
                 headers={
-                    "WWW-Authenticate": "Bearer"
+                    "WWW-Authenticate":
+                        "Bearer"
                 },
             )
 
-        return int(subject)
+        return int(
+            subject
+        )
 
     except (
         InvalidTokenError,
@@ -165,7 +195,8 @@ def decode_access_token(
                 "Token inválido o expirado"
             ),
             headers={
-                "WWW-Authenticate": "Bearer"
+                "WWW-Authenticate":
+                    "Bearer"
             },
         )
 
@@ -181,7 +212,8 @@ bearer_scheme = HTTPBearer(
 
 def get_current_user(
     credentials: (
-        HTTPAuthorizationCredentials | None
+        HTTPAuthorizationCredentials
+        | None
     ) = Depends(
         bearer_scheme
     ),
@@ -198,7 +230,8 @@ def get_current_user(
                 "Se requiere autenticación"
             ),
             headers={
-                "WWW-Authenticate": "Bearer"
+                "WWW-Authenticate":
+                    "Bearer"
             },
         )
 
@@ -217,9 +250,12 @@ def get_current_user(
             status_code=(
                 status.HTTP_401_UNAUTHORIZED
             ),
-            detail="Usuario no encontrado",
+            detail=(
+                "Usuario no encontrado"
+            ),
             headers={
-                "WWW-Authenticate": "Bearer"
+                "WWW-Authenticate":
+                    "Bearer"
             },
         )
 
@@ -269,7 +305,10 @@ def require_roles(
                 ),
             )
 
-        if role.name not in allowed_roles:
+        if (
+            role.name
+            not in allowed_roles
+        ):
             raise HTTPException(
                 status_code=(
                     status.HTTP_403_FORBIDDEN
@@ -285,6 +324,26 @@ def require_roles(
     return role_checker
 
 
-require_control_role = require_roles(
-    *CONTROL_ROLES
+# ============================================================
+# PERMISOS PREDEFINIDOS
+# ============================================================
+
+require_control_role = (
+    require_roles(
+        *CONTROL_ROLES
+    )
+)
+
+
+require_project_delete_role = (
+    require_roles(
+        *PROJECT_DELETE_ROLES
+    )
+)
+
+
+require_password_reset_role = (
+    require_roles(
+        *PASSWORD_RESET_ROLES
+    )
 )

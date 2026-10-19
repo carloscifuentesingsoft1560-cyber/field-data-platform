@@ -14,12 +14,14 @@ from backend.models import (
 )
 from backend.schemas.user import (
     UserCreate,
+    UserPasswordReset,
     UserResponse,
     UserUpdate,
 )
 from backend.security import (
     hash_password,
     require_control_role,
+    require_password_reset_role,
 )
 
 
@@ -61,10 +63,22 @@ def create_user(
         get_db
     ),
 ):
+    employee_number = (
+        user_data
+        .employee_number
+        .strip()
+    )
+
+    identification = (
+        user_data
+        .identification
+        .strip()
+    )
+
     existing_employee = db.scalar(
         select(User).where(
             User.employee_number
-            == user_data.employee_number
+            == employee_number
         )
     )
 
@@ -74,8 +88,8 @@ def create_user(
                 status.HTTP_409_CONFLICT
             ),
             detail=(
-                "El número de empleado "
-                "ya está registrado"
+                "El usuario ya está "
+                "registrado"
             ),
         )
 
@@ -83,7 +97,7 @@ def create_user(
         db.scalar(
             select(User).where(
                 User.identification
-                == user_data.identification
+                == identification
             )
         )
     )
@@ -119,11 +133,11 @@ def create_user(
 
     db_user = User(
         employee_number=(
-            user_data.employee_number
+            employee_number
         ),
 
         identification=(
-            user_data.identification
+            identification
         ),
 
         password_hash=(
@@ -316,20 +330,35 @@ def update_user(
             )
 
     # --------------------------------------------------------
-    # NÚMERO DE EMPLEADO
+    # USUARIO / CÓDIGO DE ACCESO
     # --------------------------------------------------------
 
     if (
         "employee_number"
         in update_data
     ):
+        employee_number = (
+            update_data[
+                "employee_number"
+            ].strip()
+        )
+
+        if not employee_number:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                ),
+                detail=(
+                    "El usuario no puede "
+                    "estar vacío"
+                ),
+            )
+
         existing_employee = (
             db.scalar(
                 select(User).where(
                     User.employee_number
-                    == update_data[
-                        "employee_number"
-                    ],
+                    == employee_number,
 
                     User.id
                     != user_id,
@@ -343,10 +372,14 @@ def update_user(
                     status.HTTP_409_CONFLICT
                 ),
                 detail=(
-                    "El número de empleado "
-                    "ya está registrado"
+                    "El usuario ya está "
+                    "registrado"
                 ),
             )
+
+        update_data[
+            "employee_number"
+        ] = employee_number
 
     # --------------------------------------------------------
     # IDENTIFICACIÓN
@@ -356,13 +389,28 @@ def update_user(
         "identification"
         in update_data
     ):
+        identification = (
+            update_data[
+                "identification"
+            ].strip()
+        )
+
+        if not identification:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                ),
+                detail=(
+                    "La identificación no "
+                    "puede estar vacía"
+                ),
+            )
+
         existing_identification = (
             db.scalar(
                 select(User).where(
                     User.identification
-                    == update_data[
-                        "identification"
-                    ],
+                    == identification,
 
                     User.id
                     != user_id,
@@ -380,6 +428,10 @@ def update_user(
                     "ya está registrada"
                 ),
             )
+
+        update_data[
+            "identification"
+        ] = identification
 
     # --------------------------------------------------------
     # ROL
@@ -430,3 +482,100 @@ def update_user(
     )
 
     return user
+
+
+# ============================================================
+# RESTABLECER CONTRASEÑA
+# SOLO DIRECTOR / JEFE NACIONAL
+# ============================================================
+
+@router.patch(
+    "/{user_id}/reset-password",
+    responses={
+        200: {
+            "description": (
+                "Contraseña restablecida"
+            )
+        },
+        400: {
+            "description": (
+                "No puede restablecer "
+                "su propia contraseña "
+                "desde esta función"
+            )
+        },
+        403: {
+            "description": (
+                "Rol no autorizado"
+            )
+        },
+        404: {
+            "description": (
+                "Usuario no encontrado"
+            )
+        },
+    },
+)
+def reset_user_password(
+    user_id: int,
+    password_data:
+        UserPasswordReset,
+    db: Session = Depends(
+        get_db
+    ),
+    current_user: User = Depends(
+        require_password_reset_role
+    ),
+):
+    user = db.scalar(
+        select(User).where(
+            User.id == user_id
+        )
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Usuario no encontrado"
+            ),
+        )
+
+    if (
+        user.id
+        == current_user.id
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
+            detail=(
+                "No puede restablecer "
+                "su propia contraseña "
+                "desde esta función"
+            ),
+        )
+
+    user.password_hash = (
+        hash_password(
+            password_data
+            .new_password
+        )
+    )
+
+    # Si estaba bloqueado por
+    # intentos fallidos, el
+    # restablecimiento lo desbloquea.
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    db.commit()
+
+    return {
+        "message": (
+            "Contraseña restablecida "
+            "correctamente"
+        )
+    }

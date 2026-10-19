@@ -26,6 +26,7 @@ import {
 import {
   createUser,
   getUsers,
+  resetUserPassword,
   updateUser,
 } from '../api/users'
 
@@ -62,6 +63,13 @@ const CONTROL_ROLES = new Set([
   'coordinador',
   'analista',
 ])
+
+
+const PASSWORD_RESET_ROLES =
+  new Set([
+    'director',
+    'jefe_nacional',
+  ])
 
 
 interface ApiError {
@@ -189,6 +197,32 @@ function AdminUsersPage() {
     useState<UserProject[]>([])
 
   const [
+    resetPasswordUser,
+    setResetPasswordUser,
+  ] =
+    useState<User | null>(
+      null,
+    )
+
+  const [
+    newPassword,
+    setNewPassword,
+  ] =
+    useState('')
+
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] =
+    useState('')
+
+  const [
+    isResettingPassword,
+    setIsResettingPassword,
+  ] =
+    useState(false)
+
+  const [
     isLoading,
     setIsLoading,
   ] =
@@ -231,6 +265,13 @@ function AdminUsersPage() {
     setAssignmentError,
   ] =
     useState('')
+
+
+  const canResetPasswords =
+    currentUser !== null &&
+    PASSWORD_RESET_ROLES.has(
+      currentUser.role_name,
+    )
 
 
   const loadUsers =
@@ -406,7 +447,7 @@ function AdminUsersPage() {
       setError('')
       setSuccess('')
 
-      const employeeNumber =
+      const username =
         form.employee_number
           .trim()
 
@@ -420,12 +461,12 @@ function AdminUsersPage() {
         )
 
       if (
-        !employeeNumber ||
+        !username ||
         !identification ||
         !roleId
       ) {
         setError(
-          'Número de empleado, identificación y rol son obligatorios.',
+          'Usuario, identificación y rol son obligatorios.',
         )
 
         return
@@ -443,6 +484,19 @@ function AdminUsersPage() {
         return
       }
 
+      if (
+        editingUserId ===
+          null &&
+        form.password.length <
+          8
+      ) {
+        setError(
+          'La contraseña debe tener al menos 8 caracteres.',
+        )
+
+        return
+      }
+
       try {
         setIsSaving(
           true,
@@ -454,7 +508,7 @@ function AdminUsersPage() {
         ) {
           await createUser({
             employee_number:
-              employeeNumber,
+              username,
 
             identification,
 
@@ -473,7 +527,7 @@ function AdminUsersPage() {
             editingUserId,
             {
               employee_number:
-                employeeNumber,
+                username,
 
               identification,
 
@@ -604,6 +658,134 @@ function AdminUsersPage() {
     }
 
 
+  const openPasswordReset = (
+    user: User,
+  ) => {
+    setError('')
+    setSuccess('')
+
+    setResetPasswordUser(
+      user,
+    )
+
+    setNewPassword('')
+    setConfirmPassword('')
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    })
+  }
+
+
+  const closePasswordReset = () => {
+    setResetPasswordUser(
+      null,
+    )
+
+    setNewPassword('')
+    setConfirmPassword('')
+  }
+
+
+  const handlePasswordReset =
+    async (
+      event:
+      FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault()
+
+      setError('')
+      setSuccess('')
+
+      if (
+        !resetPasswordUser
+      ) {
+        return
+      }
+
+      if (
+        newPassword.length <
+        8
+      ) {
+        setError(
+          'La nueva contraseña debe tener al menos 8 caracteres.',
+        )
+
+        return
+      }
+
+      if (
+        newPassword !==
+        confirmPassword
+      ) {
+        setError(
+          'Las contraseñas no coinciden.',
+        )
+
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `¿Deseas restablecer la contraseña del usuario "${resetPasswordUser.employee_number}"?`,
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      try {
+        setIsResettingPassword(
+          true,
+        )
+
+        await resetUserPassword(
+          resetPasswordUser.id,
+          newPassword,
+        )
+
+        setSuccess(
+          `Contraseña de "${resetPasswordUser.employee_number}" restablecida correctamente.`,
+        )
+
+        closePasswordReset()
+      } catch (
+        requestError
+      ) {
+        if (
+          axios.isAxiosError(
+            requestError,
+          ) &&
+          requestError.response
+            ?.status === 401
+        ) {
+          clearSession()
+
+          navigate(
+            '/login',
+            {
+              replace: true,
+            },
+          )
+
+          return
+        }
+
+        setError(
+          getApiErrorMessage(
+            requestError,
+            'No fue posible restablecer la contraseña.',
+          ),
+        )
+      } finally {
+        setIsResettingPassword(
+          false,
+        )
+      }
+    }
+
+
   const openAssignments =
     async (
       user: User,
@@ -679,11 +861,6 @@ function AdminUsersPage() {
           project.id,
         )
 
-      /*
-       * Evitamos que el administrador
-       * retire accidentalmente su propio
-       * acceso al proyecto.
-       */
       if (
         alreadyAssigned &&
         assignmentUser.id ===
@@ -825,9 +1002,9 @@ function AdminUsersPage() {
 
             <p>
               Crea, edita,
-              activa, desactiva
-              y asigna usuarios
-              a proyectos.
+              activa, desactiva,
+              asigna proyectos y
+              administra accesos.
             </p>
           </div>
         </div>
@@ -861,6 +1038,145 @@ function AdminUsersPage() {
           </div>
         )}
 
+        {resetPasswordUser && (
+          <section className="admin-panel">
+            <div className="page-heading">
+              <div>
+                <h2>
+                  Restablecer contraseña
+                </h2>
+
+                <p>
+                  Usuario:{' '}
+                  <strong>
+                    {
+                      resetPasswordUser
+                        .employee_number
+                    }
+                  </strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="outline-action"
+                disabled={
+                  isResettingPassword
+                }
+                onClick={
+                  closePasswordReset
+                }
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div
+              className="alert alert-offline"
+              role="note"
+            >
+              La contraseña anterior
+              no puede consultarse.
+              Se asignará una nueva
+              contraseña al usuario.
+            </div>
+
+            <form
+              className="admin-form"
+              onSubmit={
+                handlePasswordReset
+              }
+            >
+              <div className="admin-form-grid">
+                <div className="form-field">
+                  <label
+                    htmlFor="new-password"
+                  >
+                    Nueva contraseña *
+                  </label>
+
+                  <input
+                    id="new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={
+                      newPassword
+                    }
+                    disabled={
+                      isResettingPassword
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setNewPassword(
+                        event
+                          .target
+                          .value,
+                      )
+                    }
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label
+                    htmlFor="confirm-password"
+                  >
+                    Confirmar contraseña *
+                  </label>
+
+                  <input
+                    id="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={
+                      confirmPassword
+                    }
+                    disabled={
+                      isResettingPassword
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      setConfirmPassword(
+                        event
+                          .target
+                          .value,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="admin-actions">
+                <button
+                  type="submit"
+                  className="primary-action"
+                  disabled={
+                    isResettingPassword
+                  }
+                >
+                  {isResettingPassword
+                    ? 'Restableciendo...'
+                    : 'Asignar nueva contraseña'}
+                </button>
+
+                <button
+                  type="button"
+                  className="outline-action"
+                  disabled={
+                    isResettingPassword
+                  }
+                  onClick={
+                    closePasswordReset
+                  }
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
         <section className="admin-panel">
           <h2>
             {editingUserId ===
@@ -878,14 +1194,16 @@ function AdminUsersPage() {
             <div className="admin-form-grid">
               <div className="form-field">
                 <label
-                  htmlFor="employee-number"
+                  htmlFor="username"
                 >
-                  Número de empleado *
+                  Usuario *
                 </label>
 
                 <input
-                  id="employee-number"
+                  id="username"
                   type="text"
+                  autoComplete="username"
+                  placeholder="Ej. CARLOS01"
                   value={
                     form.employee_number
                   }
@@ -1365,6 +1683,21 @@ function AdminUsersPage() {
                       >
                         Proyectos
                       </button>
+
+                      {canResetPasswords &&
+                        !isCurrentUser && (
+                        <button
+                          type="button"
+                          className="outline-action"
+                          onClick={() =>
+                            openPasswordReset(
+                              user,
+                            )
+                          }
+                        >
+                          Restablecer contraseña
+                        </button>
+                      )}
                     </div>
                   </article>
                 )

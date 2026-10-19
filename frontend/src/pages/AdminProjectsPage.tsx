@@ -40,6 +40,13 @@ const CONTROL_ROLES = new Set([
 ])
 
 
+const PROJECT_DELETE_ROLES =
+  new Set([
+    'director',
+    'jefe_nacional',
+  ])
+
+
 interface ApiError {
   detail?: string
 }
@@ -147,6 +154,13 @@ function AdminProjectsPage() {
     setSuccess,
   ] =
     useState('')
+
+
+  const canDeleteProjects =
+    user !== null &&
+    PROJECT_DELETE_ROLES.has(
+      user.role_name,
+    )
 
 
   const loadProjects =
@@ -452,9 +466,19 @@ function AdminProjectsPage() {
     async (
       project: Project,
     ) => {
+      if (
+        !canDeleteProjects
+      ) {
+        setError(
+          'Solo el Director o el Jefe Nacional pueden eliminar proyectos.',
+        )
+
+        return
+      }
+
       const confirmed =
         window.confirm(
-          `¿Deseas eliminar el proyecto "${project.name}"? Esta acción solo será permitida si el proyecto no tiene formularios asociados.`,
+          `¿Deseas eliminar el proyecto "${project.name}"? Solo puede eliminarse si todavía no tiene formularios asociados.`,
         )
 
       if (!confirmed) {
@@ -487,18 +511,38 @@ function AdminProjectsPage() {
         if (
           axios.isAxiosError(
             requestError,
-          ) &&
-          requestError.response
-            ?.status === 409
-        ) {
-          setError(
-            getApiErrorMessage(
-              requestError,
-              'El proyecto tiene información asociada y no puede eliminarse.',
-            ),
           )
+        ) {
+          const status =
+            requestError
+              .response
+              ?.status
 
-          return
+          if (
+            status === 403
+          ) {
+            setError(
+              getApiErrorMessage(
+                requestError,
+                'Solo el Director o el Jefe Nacional pueden eliminar proyectos.',
+              ),
+            )
+
+            return
+          }
+
+          if (
+            status === 409
+          ) {
+            setError(
+              getApiErrorMessage(
+                requestError,
+                'El proyecto tiene información asociada y no puede eliminarse.',
+              ),
+            )
+
+            return
+          }
         }
 
         setError(
@@ -931,6 +975,18 @@ function AdminProjectsPage() {
                       type="button"
                       className="primary-action"
                       onClick={() =>
+                        navigate(
+                          `/admin/projects/${project.id}/forms`,
+                        )
+                      }
+                    >
+                      Formularios
+                    </button>
+
+                    <button
+                      type="button"
+                      className="outline-action"
+                      onClick={() =>
                         startEditing(
                           project,
                         )
@@ -954,17 +1010,19 @@ function AdminProjectsPage() {
                         : 'Activar'}
                     </button>
 
-                    <button
-                      type="button"
-                      className="danger-action"
-                      onClick={() =>
-                        void handleDelete(
-                          project,
-                        )
-                      }
-                    >
-                      Eliminar
-                    </button>
+                    {canDeleteProjects && (
+                      <button
+                        type="button"
+                        className="danger-action"
+                        onClick={() =>
+                          void handleDelete(
+                            project,
+                          )
+                        }
+                      >
+                        Eliminar
+                      </button>
+                    )}
                   </div>
                 </article>
               ),

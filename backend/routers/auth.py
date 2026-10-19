@@ -94,8 +94,7 @@ def login(
                 status.HTTP_401_UNAUTHORIZED
             ),
             detail=(
-                "Número de empleado "
-                "o contraseña incorrectos"
+                "Usuario o contraseña incorrectos"
             ),
         )
 

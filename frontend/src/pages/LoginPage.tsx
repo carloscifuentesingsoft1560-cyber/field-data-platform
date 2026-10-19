@@ -38,8 +38,8 @@ function LoginPage() {
     useSearchParams()
 
   const [
-    employeeNumber,
-    setEmployeeNumber,
+    username,
+    setUsername,
   ] =
     useState('')
 
@@ -92,11 +92,11 @@ function LoginPage() {
       setError('')
 
       if (
-        !employeeNumber.trim() ||
+        !username.trim() ||
         !password
       ) {
         setError(
-          'Ingrese el número de empleado y la contraseña.',
+          'Ingrese el usuario y la contraseña.',
         )
 
         return
@@ -110,7 +110,7 @@ function LoginPage() {
         const tokenData =
           await login({
             employee_number:
-              employeeNumber.trim(),
+              username.trim(),
 
             password,
           })
@@ -206,17 +206,17 @@ function LoginPage() {
           )}
 
           <label>
-            Número de empleado
+            Usuario
 
             <input
               type="text"
               value={
-                employeeNumber
+                username
               }
               onChange={(
                 event,
               ) =>
-                setEmployeeNumber(
+                setUsername(
                   event.target.value,
                 )
               }
@@ -224,6 +224,7 @@ function LoginPage() {
               disabled={
                 isLoading
               }
+              placeholder="Ej. CARLOS01"
             />
           </label>
 
@@ -268,6 +269,16 @@ function LoginPage() {
               ? 'Ingresando...'
               : 'Ingresar'}
           </button>
+
+          <div
+            className="alert alert-offline"
+            role="note"
+          >
+            ¿Olvidaste tu contraseña?
+            Solicita al Director o al
+            Jefe Nacional el
+            restablecimiento de tu acceso.
+          </div>
         </form>
       </section>
     </main>

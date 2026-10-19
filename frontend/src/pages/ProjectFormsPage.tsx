@@ -12,6 +12,7 @@ import {
 
 import {
   clearSession,
+  getCurrentUser,
   getSessionUserId,
 } from '../api/auth'
 
@@ -19,9 +20,15 @@ import api from '../api/client'
 
 import {
   cacheForms,
+  cacheUser,
   getCachedFormsByProject,
   getCachedProject,
+  getCachedUser,
 } from '../services/offlineCache'
+
+import type {
+  AuthUser,
+} from '../types/auth'
 
 import type {
   Form,
@@ -32,12 +39,30 @@ import type {
 } from '../types/project'
 
 
+const CONTROL_ROLES = new Set([
+  'director',
+  'jefe_nacional',
+  'coordinador',
+  'analista',
+])
+
+
 function ProjectFormsPage() {
   const navigate =
     useNavigate()
 
-  const { projectId } =
+  const {
+    projectId,
+  } =
     useParams()
+
+  const [
+    currentUser,
+    setCurrentUser,
+  ] =
+    useState<AuthUser | null>(
+      null,
+    )
 
   const [
     project,
@@ -72,11 +97,20 @@ function ProjectFormsPage() {
     useState(false)
 
 
+  const canManageForms =
+    currentUser !== null &&
+    CONTROL_ROLES.has(
+      currentUser.role_name,
+    )
+
+
   useEffect(() => {
     const loadData =
       async () => {
         const numericProjectId =
-          Number(projectId)
+          Number(
+            projectId,
+          )
 
         if (
           !projectId ||
@@ -88,7 +122,9 @@ function ProjectFormsPage() {
             'El proyecto seleccionado no es válido.',
           )
 
-          setIsLoading(false)
+          setIsLoading(
+            false,
+          )
 
           return
         }
@@ -111,10 +147,13 @@ function ProjectFormsPage() {
 
         try {
           const [
+            authenticatedUser,
             projectResponse,
             formsResponse,
           ] =
             await Promise.all([
+              getCurrentUser(),
+
               api.get<Project>(
                 `/projects/${numericProjectId}`,
               ),
@@ -131,6 +170,10 @@ function ProjectFormsPage() {
                 numericProjectId,
             )
 
+          setCurrentUser(
+            authenticatedUser,
+          )
+
           setProject(
             projectResponse.data,
           )
@@ -144,12 +187,23 @@ function ProjectFormsPage() {
           )
 
           try {
-            await cacheForms(
-              ownerUserId,
-              formsResponse.data,
-            )
+            await Promise.all([
+              cacheUser(
+                authenticatedUser,
+              ),
+
+              cacheForms(
+                ownerUserId,
+                formsResponse.data,
+              ),
+            ])
           } catch {
-            // La API ya cargó.
+            /*
+             * Un problema con IndexedDB
+             * no debe impedir el uso
+             * normal cuando la API está
+             * disponible.
+             */
           }
         } catch (
           requestError
@@ -164,7 +218,9 @@ function ProjectFormsPage() {
                 .response
                 ?.status
 
-            if (status === 401) {
+            if (
+              status === 401
+            ) {
               clearSession()
 
               navigate(
@@ -189,12 +245,23 @@ function ProjectFormsPage() {
             }
           }
 
+          /*
+           * Si no hay conexión,
+           * intentamos recuperar
+           * proyecto, formularios y
+           * usuario desde IndexedDB.
+           */
           try {
             const [
+              cachedUser,
               cachedProject,
               cachedForms,
             ] =
               await Promise.all([
+                getCachedUser(
+                  ownerUserId,
+                ),
+
                 getCachedProject(
                   ownerUserId,
                   numericProjectId,
@@ -213,6 +280,10 @@ function ProjectFormsPage() {
 
               return
             }
+
+            setCurrentUser(
+              cachedUser,
+            )
 
             setProject(
               cachedProject,
@@ -272,7 +343,9 @@ function ProjectFormsPage() {
           className="secondary-button"
           type="button"
           onClick={() =>
-            navigate('/projects')
+            navigate(
+              '/projects',
+            )
           }
         >
           Volver a proyectos
@@ -307,39 +380,96 @@ function ProjectFormsPage() {
               <div className="page-heading">
                 <div>
                   <h1>
-                    {project.name}
+                    {
+                      project.name
+                    }
                   </h1>
 
                   <p>
                     Selecciona un formulario
-                    para continuar o revisa
-                    las encuestas recibidas.
+                    para diligenciar una
+                    encuesta o administra
+                    los formularios del
+                    proyecto.
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  className="primary-action"
-                  onClick={() =>
-                    navigate(
-                      `/projects/${project.id}/surveys`,
-                    )
-                  }
-                >
-                  Ver encuestas
-                </button>
+                <div className="admin-actions">
+                  {canManageForms &&
+                    !isOfflineData && (
+                      <button
+                        type="button"
+                        className="primary-action"
+                        onClick={() =>
+                          navigate(
+                            `/admin/projects/${project.id}/forms`,
+                          )
+                        }
+                      >
+                        Administrar formularios
+                      </button>
+                    )}
+
+                  <button
+                    type="button"
+                    className="outline-action"
+                    onClick={() =>
+                      navigate(
+                        `/projects/${project.id}/surveys`,
+                      )
+                    }
+                  >
+                    Ver encuestas
+                  </button>
+                </div>
               </div>
 
-              {forms.length === 0 && (
+              {forms.length ===
+                0 && (
                 <div className="empty-state">
                   <h2>
                     Sin formularios
                   </h2>
 
-                  <p>
-                    Este proyecto no tiene
-                    formularios disponibles.
-                  </p>
+                  {canManageForms &&
+                  !isOfflineData ? (
+                    <>
+                      <p>
+                        Este proyecto todavía
+                        no tiene formularios.
+                        Crea el primero para
+                        comenzar a capturar
+                        encuestas.
+                      </p>
+
+                      <div
+                        className="admin-actions"
+                        style={{
+                          justifyContent:
+                            'center',
+                          marginTop:
+                            '20px',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="primary-action"
+                          onClick={() =>
+                            navigate(
+                              `/admin/projects/${project.id}/forms`,
+                            )
+                          }
+                        >
+                          Crear formulario
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p>
+                      Este proyecto no tiene
+                      formularios disponibles.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -354,7 +484,9 @@ function ProjectFormsPage() {
                     >
                       <div className="card-heading">
                         <h2>
-                          {form.name}
+                          {
+                            form.name
+                          }
                         </h2>
 
                         <span
@@ -386,7 +518,7 @@ function ProjectFormsPage() {
                           )
                         }
                       >
-                        Abrir formulario
+                        Diligenciar encuesta
                       </button>
                     </article>
                   ),
